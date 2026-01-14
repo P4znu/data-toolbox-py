@@ -32,5 +32,5 @@ jobs:
     - name: Upload Finished EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Windows-Data-Processor
+        name: xlsx-csv
         path: dist/Xlsx to Csv.exe
