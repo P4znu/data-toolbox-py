@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Tkinter GUI XLSX → CSV Converter
-Shows sheet names after file selection.
+Shows sheet names and previews first rows before conversion.
 """
 
 import tkinter as tk
@@ -53,10 +53,31 @@ def select_output_dir():
     entry_output.delete(0, tk.END)
     entry_output.insert(0, dir_path)
 
+def preview_sheet():
+    xlsx_file = entry_file.get()
+    selected = sheet_list.curselection()
+    if not xlsx_file or not selected:
+        messagebox.showerror("Error", "Please select a file and sheet first.")
+        return
+
+    sheet_name = sheet_list.get(selected[0])
+    try:
+        wb = load_workbook(xlsx_file, read_only=True, data_only=True)
+        ws = wb[sheet_name]
+
+        preview_text.delete("1.0", tk.END)
+        for i, row in enumerate(ws.iter_rows(values_only=True)):
+            preview_text.insert(tk.END, f"{row}\n")
+            if i >= 4:  # show first 5 rows only
+                break
+
+        wb.close()
+    except Exception as e:
+        messagebox.showerror("Error", f"Preview failed: {e}")
+
 def convert():
     xlsx_file = entry_file.get()
     output_dir = entry_output.get()
-    # Get selected sheet from listbox (optional)
     selected = sheet_list.curselection()
     sheet_name = sheet_list.get(selected[0]) if selected else None
 
@@ -88,6 +109,11 @@ tk.Label(root, text="Sheet Names:").grid(row=2, column=0, sticky="nw")
 sheet_list = tk.Listbox(root, height=6, width=50, selectmode=tk.SINGLE)
 sheet_list.grid(row=2, column=1, pady=5)
 
-tk.Button(root, text="Convert", command=convert, bg="lightgreen").grid(row=3, column=1, pady=10)
+tk.Button(root, text="Preview", command=preview_sheet, bg="lightblue").grid(row=3, column=1, pady=5)
+
+preview_text = tk.Text(root, height=8, width=60, bg="#f9f9f9")
+preview_text.grid(row=4, column=0, columnspan=3, padx=10, pady=5)
+
+tk.Button(root, text="Convert", command=convert, bg="lightgreen").grid(row=5, column=1, pady=10)
 
 root.mainloop()
