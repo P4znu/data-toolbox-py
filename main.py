@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Tkinter GUI for Fast XLSX → CSV Converter
-Uses openpyxl in read-only mode for large files.
+Tkinter GUI XLSX → CSV Converter
+Shows sheet names after file selection.
 """
 
 import tkinter as tk
@@ -37,6 +37,17 @@ def select_file():
     entry_file.delete(0, tk.END)
     entry_file.insert(0, file_path)
 
+    # Show sheet names
+    if file_path:
+        try:
+            wb = load_workbook(file_path, read_only=True, data_only=True)
+            sheet_list.delete(0, tk.END)  # clear old entries
+            for sheet in wb.sheetnames:
+                sheet_list.insert(tk.END, sheet)
+            wb.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read sheets: {e}")
+
 def select_output_dir():
     dir_path = filedialog.askdirectory(title="Select Output Folder")
     entry_output.delete(0, tk.END)
@@ -45,7 +56,9 @@ def select_output_dir():
 def convert():
     xlsx_file = entry_file.get()
     output_dir = entry_output.get()
-    sheet_name = entry_sheet.get().strip() or None
+    # Get selected sheet from listbox (optional)
+    selected = sheet_list.curselection()
+    sheet_name = sheet_list.get(selected[0]) if selected else None
 
     if not xlsx_file or not output_dir:
         messagebox.showerror("Error", "Please select both input file and output folder.")
@@ -71,9 +84,9 @@ entry_output = tk.Entry(root, width=50)
 entry_output.grid(row=1, column=1)
 tk.Button(root, text="Browse", command=select_output_dir).grid(row=1, column=2)
 
-tk.Label(root, text="Sheet Name (optional):").grid(row=2, column=0, sticky="w")
-entry_sheet = tk.Entry(root, width=50)
-entry_sheet.grid(row=2, column=1)
+tk.Label(root, text="Sheet Names:").grid(row=2, column=0, sticky="nw")
+sheet_list = tk.Listbox(root, height=6, width=50, selectmode=tk.SINGLE)
+sheet_list.grid(row=2, column=1, pady=5)
 
 tk.Button(root, text="Convert", command=convert, bg="lightgreen").grid(row=3, column=1, pady=10)
 
