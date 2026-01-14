@@ -3,3 +3,4 @@ ttkbootstrap
 chardet
 Pillow
 pyinstaller
+openpyxl
