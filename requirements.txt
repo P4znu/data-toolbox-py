@@ -1,3 +1,4 @@
 tkinter 
 openpyxl 
 pyinstaller
+chardet
