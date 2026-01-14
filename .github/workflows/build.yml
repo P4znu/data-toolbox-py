@@ -23,14 +23,14 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pandas numpy openpyxl pyinstaller
+        pip install pandas numpy openpyxl pyinstaller chardet tkinter
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller --noconsole --onefile --name "Xlsx to Csv" main.py
+        pyinstaller --noconsole --onefile --name "Toolbox" main.py
 
     - name: Upload Finished EXE
       uses: actions/upload-artifact@v4
       with:
-        name: xlsx-csv
-        path: dist/Xlsx to Csv.exe
+        name: JesterToolbox
+        path: dist/Toolbox.exe
