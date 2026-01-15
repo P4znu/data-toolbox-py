@@ -890,7 +890,7 @@ class ExcelToCsvConverter:
 # =============================================================================
 def main():
     root = tk.Tk()
-    root.title("Data Toolkit")
+    root.title("Data Toolkit - Jester Miranda")
     root.geometry("1100x700")
 
     # Notebook with tabs
