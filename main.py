@@ -19,159 +19,289 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 class SimpleCSVMerger:
     def __init__(self, parent):
         self.parent = parent
+        # Dataframes and metadata
         self.df1 = None
         self.df2 = None
         self.all_cols_f1 = []
         self.all_cols_f2 = []
-        self.pull_vars = {}        
-        self.checkbox_widgets = [] 
+        self.pull_vars = {}
+        self.checkbox_widgets = []
+
         self.setup_ui()
 
     def setup_ui(self):
         main = ttk.Frame(self.parent, padding="15")
         main.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(main, text="1. Select CSV Files", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
+        # --- 1. File Selection ---
+        ttk.Label(main, text="1. Select CSV Files", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
         f_frame = ttk.Frame(main)
         f_frame.pack(fill=tk.X, pady=5)
-        
-        self.file1_path = ttk.Entry(f_frame); self.file1_path.pack(fill=tk.X, pady=2)
+
+        self.file1_path = ttk.Entry(f_frame)
+        self.file1_path.pack(fill=tk.X, pady=2)
         ttk.Button(f_frame, text="Browse Primary File", command=lambda: self.browse(1)).pack(fill=tk.X)
-        
-        self.file2_path = ttk.Entry(f_frame); self.file2_path.pack(fill=tk.X, pady=(10, 2))
+
+        self.file2_path = ttk.Entry(f_frame)
+        self.file2_path.pack(fill=tk.X, pady=(10, 2))
         ttk.Button(f_frame, text="Browse Source File", command=lambda: self.browse(2)).pack(fill=tk.X)
 
-        ttk.Label(main, text="2. Join Keys (Searchable)", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        # --- 2. Matching with Search ---
+        ttk.Label(main, text="2. Join Keys (Searchable)", font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
         m_frame = ttk.Frame(main)
         m_frame.pack(fill=tk.X, pady=5)
-        
-        self.s1_var = tk.StringVar(); self.s1_var.trace_add("write", lambda *a: self.filter_key_list(1))
+
+        # Search Entry for File 1 Keys
+        self.s1_var = tk.StringVar()
+        self.s1_var.trace_add("write", lambda *a: self.filter_key_list(1))
         ttk.Entry(m_frame, textvariable=self.s1_var, font=('Arial', 8, 'italic')).grid(row=0, column=0, sticky="ew")
-        self.match_f1 = ttk.Combobox(m_frame, state="readonly", width=35)
+        self.match_f1 = ttk.Combobox(m_frame, state="readonly", width=40)
         self.match_f1.grid(row=1, column=0, padx=5)
 
         ttk.Label(m_frame, text="↔").grid(row=1, column=1)
 
-        self.s2_var = tk.StringVar(); self.s2_var.trace_add("write", lambda *a: self.filter_key_list(2))
+        # Search Entry for File 2 Keys
+        self.s2_var = tk.StringVar()
+        self.s2_var.trace_add("write", lambda *a: self.filter_key_list(2))
         ttk.Entry(m_frame, textvariable=self.s2_var, font=('Arial', 8, 'italic')).grid(row=0, column=2, sticky="ew")
-        self.match_f2 = ttk.Combobox(m_frame, state="readonly", width=35)
+        self.match_f2 = ttk.Combobox(m_frame, state="readonly", width=40)
         self.match_f2.grid(row=1, column=2, padx=5)
 
-        ttk.Label(main, text="3. Columns to Pull", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
-        ctrl = ttk.Frame(main); ctrl.pack(fill=tk.X, pady=5)
-        self.search_var = tk.StringVar(); self.search_var.trace_add("write", self.filter_checkboxes)
+        # Make columns expand nicely
+        m_frame.columnconfigure(0, weight=1)
+        m_frame.columnconfigure(2, weight=1)
+
+        # --- 3. Columns to Pull ---
+        ttk.Label(main, text="3. Columns to Pull", font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        ctrl = ttk.Frame(main)
+        ctrl.pack(fill=tk.X, pady=5)
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", self.filter_checkboxes)
         ttk.Entry(ctrl, textvariable=self.search_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         ttk.Button(ctrl, text="All", width=5, command=self.select_all).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="None", width=5, command=self.deselect_all).pack(side=tk.LEFT)
 
-        self.check_canvas = tk.Canvas(main, bg="white", height=120, highlightthickness=1)
-        self.check_scroll = ttk.Scrollbar(main, orient="vertical", command=self.check_canvas.yview)
+        # Scrollable checkbox area
+        canvas_frame = ttk.Frame(main)
+        canvas_frame.pack(fill=tk.BOTH, expand=False, pady=5)
+        self.check_canvas = tk.Canvas(canvas_frame, bg="white", height=150, highlightthickness=1)
+        self.check_scroll = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.check_canvas.yview)
         self.check_frame = ttk.Frame(self.check_canvas)
         self.check_canvas.create_window((0, 0), window=self.check_frame, anchor="nw")
         self.check_canvas.configure(yscrollcommand=self.check_scroll.set)
-        self.check_canvas.pack(fill=tk.BOTH, expand=False)
-        self.check_scroll.pack(side=tk.RIGHT, fill=tk.Y, before=self.check_canvas)
 
-        btn_frame = ttk.Frame(main); btn_frame.pack(fill=tk.X, pady=10)
+        # Layout: canvas left, scrollbar right
+        self.check_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.check_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Keep scrollregion updated
+        self.check_frame.bind("<Configure>", lambda e: self.check_canvas.configure(scrollregion=self.check_canvas.bbox("all")))
+
+        # --- 4. Actions & Preview ---
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill=tk.X, pady=10)
         self.prev_btn = ttk.Button(btn_frame, text="PREVIEW DATA", command=self.show_preview, state=tk.DISABLED)
         self.prev_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         self.merge_btn = ttk.Button(btn_frame, text="SAVE MERGED FILE", command=self.process_merge, state=tk.DISABLED)
         self.merge_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        self.preview_box = tk.Text(main, height=10, font=("Consolas", 9), bg="#f8f8f8")
+        self.preview_box = tk.Text(main, height=12, font=("Courier New", 9), bg="#f8f8f8")
         self.preview_box.pack(fill=tk.BOTH, expand=True)
 
-        self.prog = ttk.Progressbar(main, mode='determinate'); self.prog.pack(fill=tk.X, pady=5)
-        self.stat_var = tk.StringVar(value="Ready"); self.stat_bar = ttk.Label(main, textvariable=self.stat_var, relief=tk.SUNKEN, anchor=tk.W)
+        # --- 5. Status & Progress ---
+        self.prog = ttk.Progressbar(main, mode='determinate')
+        self.prog.pack(fill=tk.X, pady=5)
+        self.stat_var = tk.StringVar(value="Ready")
+        self.stat_bar = ttk.Label(main, textvariable=self.stat_var, relief=tk.SUNKEN, anchor=tk.W)
         self.stat_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def detect_enc(self, path):
-        with open(path, 'rb') as f:
-            raw = f.read(100000)
-            res = chardet.detect(raw)
-            return res['encoding'] if res['encoding'] else 'utf-8'
+        try:
+            with open(path, 'rb') as f:
+                raw = f.read(100000)
+                res = chardet.detect(raw)
+                return res['encoding'] if res and res.get('encoding') else 'utf-8'
+        except Exception:
+            return 'utf-8'
 
     def browse(self, num):
         path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
         if path:
             target = self.file1_path if num == 1 else self.file2_path
-            target.delete(0, tk.END); target.insert(0, path)
+            target.delete(0, tk.END)
+            target.insert(0, path)
             self.load_data(num)
 
     def load_data(self, num):
         path = self.file1_path.get() if num == 1 else self.file2_path.get()
+        if not path:
+            return
+        self.stat_var.set(f"Loading file {num}...")
+        self.prog.start()
+
         def run():
             try:
                 enc = self.detect_enc(path)
-                df = pd.read_csv(path, encoding=enc, engine='python')
+                try:
+                    df = pd.read_csv(path, encoding=enc, engine='python')
+                except Exception:
+                    df = pd.read_csv(path, encoding='latin-1', engine='python')
+
                 df.columns = [str(c).strip() for c in df.columns]
+                # Ensure columns are unique
+                df = df.loc[:, ~df.columns.duplicated()]
+
                 self.parent.after(0, lambda: self.on_load_success(num, df))
             except Exception as e:
-                self.parent.after(0, lambda: messagebox.showerror("Error", str(e)))
+                self.parent.after(0, lambda: messagebox.showerror("File Error", str(e)))
+            finally:
+                self.parent.after(0, self.prog.stop)
+
         threading.Thread(target=run, daemon=True).start()
 
     def on_load_success(self, num, df):
         if num == 1:
-            self.df1 = df; self.all_cols_f1 = list(df.columns)
+            self.df1 = df
+            self.all_cols_f1 = list(df.columns)
             self.filter_key_list(1)
+            self.stat_var.set("Primary file loaded.")
         else:
-            self.df2 = df; self.all_cols_f2 = list(df.columns)
+            self.df2 = df
+            self.all_cols_f2 = list(df.columns)
             self.filter_key_list(2)
-            self.pull_vars = {col: tk.BooleanVar() for col in self.all_cols_f2}
+            # initialize pull_vars for df2 columns
+            self.pull_vars = {col: tk.BooleanVar(value=False) for col in self.all_cols_f2}
             self.filter_checkboxes()
+            self.stat_var.set("Source file loaded.")
+
         if self.df1 is not None and self.df2 is not None:
-            self.prev_btn.config(state=tk.NORMAL); self.merge_btn.config(state=tk.NORMAL)
+            self.prev_btn.config(state=tk.NORMAL)
+            self.merge_btn.config(state=tk.NORMAL)
 
     def filter_key_list(self, num):
-        term = (self.s1_var.get() if num == 1 else self.s2_var.get()).lower()
+        term = self.s1_var.get().lower() if num == 1 else self.s2_var.get().lower()
         full = self.all_cols_f1 if num == 1 else self.all_cols_f2
         filt = [c for c in full if term in c.lower()]
         target = self.match_f1 if num == 1 else self.match_f2
         target['values'] = filt
-        if filt: target.current(0)
+        try:
+            if filt:
+                target.current(0)
+            else:
+                target.set('')
+        except Exception:
+            # ignore if current can't be set
+            target.set('')
 
     def filter_checkboxes(self, *args):
-        for w in self.checkbox_widgets: w.destroy()
+        # Clear existing
+        for w in self.checkbox_widgets:
+            try:
+                w.destroy()
+            except Exception:
+                pass
         self.checkbox_widgets = []
+
         term = self.search_var.get().lower()
+        # If pull_vars not initialized yet, nothing to show
+        if not self.pull_vars:
+            return
+
         for col in self.all_cols_f2:
             if term in col.lower():
-                cb = tk.Checkbutton(self.check_frame, text=col, variable=self.pull_vars[col], bg="white")
-                cb.pack(fill=tk.X, padx=5); self.checkbox_widgets.append(cb)
-        self.check_frame.update_idletasks()
-        self.check_canvas.config(scrollregion=self.check_canvas.bbox("all"))
+                var = self.pull_vars.get(col)
+                if var is None:
+                    var = tk.BooleanVar(value=False)
+                    self.pull_vars[col] = var
+                # Use ttk.Checkbutton for consistent styling
+                cb = ttk.Checkbutton(self.check_frame, text=col, variable=var)
+                cb.pack(fill=tk.X, padx=5, pady=1)
+                self.checkbox_widgets.append(cb)
+
+        # update scrollregion (bound to configure already)
+        self.check_canvas.configure(scrollregion=self.check_canvas.bbox("all"))
 
     def select_all(self):
-        for v in self.pull_vars.values(): v.set(True)
+        for v in self.pull_vars.values():
+            v.set(True)
+
     def deselect_all(self):
-        for v in self.pull_vars.values(): v.set(False)
+        for v in self.pull_vars.values():
+            v.set(False)
 
     def perform_merge(self):
-        k1, k2 = self.match_f1.get(), self.match_f2.get()
+        k1 = self.match_f1.get().strip()
+        k2 = self.match_f2.get().strip()
         pull = [c for c, v in self.pull_vars.items() if v.get()]
-        if not k1 or not k2 or not pull: return None
+
+        if not k1 or not k2 or not pull:
+            messagebox.showwarning("Input Missing", "Select both keys and at least one column to pull.")
+            return None
+
+        if self.df1 is None or self.df2 is None:
+            messagebox.showwarning("Data Missing", "Both files must be loaded before merging.")
+            return None
+
+        if k1 not in self.df1.columns:
+            messagebox.showerror("Key Error", f"Key '{k1}' not found in primary file.")
+            return None
+        if k2 not in self.df2.columns:
+            messagebox.showerror("Key Error", f"Key '{k2}' not found in source file.")
+            return None
+
         try:
+            self.prog['value'] = 20
+            self.stat_var.set("Processing merge...")
             d1 = self.df1.copy()
-            d2 = self.df2[list(set([k2] + pull))].copy()
+            # ensure requested pull columns exist in df2
+            d2_cols = [c for c in ([k2] + pull) if c in self.df2.columns]
+            if k2 not in d2_cols:
+                d2_cols.insert(0, k2)
+            d2 = self.df2[d2_cols].copy()
+
+            # Normalize join keys to strings and strip
             d1[k1] = d1[k1].astype(str).str.strip()
             d2[k2] = d2[k2].astype(str).str.strip()
-            res = d1.merge(d2, left_on=k1, right_on=k2, how='left')
-            if k1 != k2: res.drop(columns=[k2], inplace=True)
+
+            res = d1.merge(d2, left_on=k1, right_on=k2, how='left', suffixes=('', '_src'))
+            # If both keys exist and are different, drop the right key column to avoid duplication
+            if k1 != k2 and k2 in res.columns:
+                try:
+                    res.drop(columns=[k2], inplace=True)
+                except Exception:
+                    pass
+
+            self.prog['value'] = 80
+            self.stat_var.set("Merge complete.")
             return res
         except Exception as e:
-            messagebox.showerror("Merge Error", str(e)); return None
+            messagebox.showerror("Merge Error", f"Error during merge: {str(e)}")
+            return None
 
     def show_preview(self):
         res = self.perform_merge()
         if res is not None:
             self.preview_box.delete(1.0, tk.END)
-            self.preview_box.insert(tk.END, res.head(20).to_string())
+            try:
+                self.preview_box.insert(tk.END, res.head(20).to_string())
+            except Exception:
+                # fallback to repr
+                self.preview_box.insert(tk.END, repr(res.head(20)))
+            self.prog['value'] = 100
 
     def process_merge(self):
         res = self.perform_merge()
         if res is not None:
-            path = filedialog.asksaveasfilename(defaultextension=".csv")
-            if path: res.to_csv(path, index=False, encoding='utf-8-sig')
+            path = filedialog.asksaveasfilename(defaultextension=".csv", initialfile="merged_output.csv",
+                                                filetypes=[("CSV files", "*.csv")])
+            if path:
+                try:
+                    res.to_csv(path, index=False, encoding='utf-8-sig')
+                    messagebox.showinfo("Success", f"File saved to:\n{path}")
+                    self.stat_var.set("Saved successfully.")
+                except Exception as e:
+                    messagebox.showerror("Save Error", f"Failed to save file: {e}")
+            self.prog['value'] = 0
 
 # =============================================================================
 # TAB 2: DATA PROCESSOR
@@ -179,127 +309,315 @@ class SimpleCSVMerger:
 class DataProcessorGUI:
     def __init__(self, parent):
         self.parent = parent
+
+        # State variables
         self.df = None
         self.file_path = None
         self.map_full_df = None
         self.map_df = None
+
         self.setup_ui()
+        self.log("System Ready. Please load MAP.csv if not already present.")
         self.load_map_silent()
 
     def setup_ui(self):
         main_frame = ttk.Frame(self.parent, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(main_frame, text="1. Load Data", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
-        ttk.Button(main_frame, text="Select Data File", command=self.load_file).pack(fill=tk.X, pady=5)
+        # --- Section 1: File Loading ---
+        ttk.Label(main_frame, text="1. Load Data", font=('Helvetica', 10, 'bold')).pack(anchor=tk.W)
+        file_btn = ttk.Button(main_frame, text="Select Data File (CSV/XLSX/JSON)", command=self.load_file)
+        file_btn.pack(fill=tk.X, pady=5)
+
         self.file_label = ttk.Label(main_frame, text="No file selected", foreground="gray")
         self.file_label.pack(anchor=tk.W, pady=(0, 15))
 
-        ttk.Label(main_frame, text="2. Data Operations", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
+        # --- Section 2: Actions ---
+        ttk.Label(main_frame, text="2. Data Operations", font=('Helvetica', 10, 'bold')).pack(anchor=tk.W)
+
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=5)
+
         ttk.Button(btn_frame, text="Remove BSG", command=self.remove_bsg).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
         ttk.Button(btn_frame, text="Filter ACT", command=self.filter_act).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
-        ttk.Button(btn_frame, text="Full Process", command=self.run_full_process_threaded).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+        ttk.Button(btn_frame, text="Full Process", command=self.run_full_process).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
 
-        ttk.Label(main_frame, text="3. Progress & Log", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(15, 0))
-        self.progress = ttk.Progressbar(main_frame, mode='determinate')
+        # --- Section 3: Progress & Logs ---
+        ttk.Label(main_frame, text="3. Progress & Activity Log", font=('Helvetica', 10, 'bold')).pack(anchor=tk.W, pady=(15, 0))
+
+        self.progress = ttk.Progressbar(main_frame, orient=tk.HORIZONTAL, mode='determinate')
         self.progress.pack(fill=tk.X, pady=10)
+
         self.log_area = scrolledtext.ScrolledText(main_frame, height=12, font=('Consolas', 9), bg="#f8f9fa")
         self.log_area.pack(fill=tk.BOTH, expand=True)
 
     def log(self, message):
-        self.log_area.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {message}\n")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.log_area.insert(tk.END, f"[{timestamp}] {message}\n")
         self.log_area.see(tk.END)
 
     def load_map_silent(self):
-        if os.path.exists('MAP.csv'):
+        map_path = 'MAP.csv'
+        if os.path.exists(map_path):
             try:
-                self.map_full_df = pd.read_csv('MAP.csv')
+                self.map_full_df = pd.read_csv(map_path)
                 if self.map_full_df.shape[1] >= 3:
+                    # Use first and third columns as PROVINCENAME and REGION if present
                     self.map_df = self.map_full_df.iloc[:, [0, 2]].copy()
                     self.map_df.columns = ['PROVINCENAME', 'REGION']
                     self.map_df.drop_duplicates(subset=['PROVINCENAME'], inplace=True)
-                    self.log("✅ MAP.csv loaded.")
-            except Exception as e: self.log(f"❌ Map Error: {e}")
+                    self.log("✅ MAP.csv loaded and indexed.")
+                else:
+                    self.log("⚠️ MAP.csv found but doesn't have expected columns.")
+            except Exception as e:
+                self.log(f"❌ Error loading MAP.csv: {e}")
+        else:
+            self.log("⚠️ MAP.csv not found in folder. Some features will be disabled.")
 
     def load_file(self):
-        path = filedialog.askopenfilename(filetypes=[("Data Files", "*.csv *.xlsx *.json")])
+        path = filedialog.askopenfilename(filetypes=[("Data Files", "*.csv *.xlsx *.json *.jsonl")])
         if path:
             try:
+                self.log(f"Opening: {os.path.basename(path)}...")
                 ext = os.path.splitext(path)[1].lower()
-                if ext == '.csv': self.df = pd.read_csv(path, encoding='latin1')
-                elif ext == '.xlsx': self.df = pd.read_excel(path)
-                else: self.df = pd.read_json(path)
+
+                if ext == '.csv':
+                    try:
+                        # try utf-8 first
+                        self.df = pd.read_csv(path, encoding='utf-8')
+                    except Exception:
+                        self.log("UTF-8 failed, trying latin1...")
+                        self.df = pd.read_csv(path, encoding='latin1')
+
+                elif ext == '.xlsx':
+                    self.df = pd.read_excel(path)
+                else:
+                    # json or jsonl
+                    self.df = pd.read_json(path, lines=ext == '.jsonl')
+
                 self.file_path = path
                 self.file_label.config(text=f"Loaded: {os.path.basename(path)}", foreground="#007bff")
-                self.log(f"✅ Loaded {len(self.df)} rows.")
-            except Exception as e: messagebox.showerror("Error", str(e))
+                self.log(f"✅ Success: Loaded {len(self.df)} rows.")
+            except Exception as e:
+                self.log(f"❌ Load Error: {e}")
+                messagebox.showerror("Error", f"Failed to load: {e}")
 
     def save_df(self, suffix):
-        os.makedirs('data', exist_ok=True)
-        out = os.path.join('data', f"{os.path.splitext(os.path.basename(self.file_path))[0]}_{suffix}.csv")
-        self.df.to_csv(out, index=False)
-        self.log(f"💾 Saved: {out}")
+        if not self.file_path or self.df is None:
+            self.log("❌ Save Error: No file loaded or no data to save.")
+            return None
+
+        output_folder = 'data'
+        os.makedirs(output_folder, exist_ok=True)
+        base = os.path.splitext(os.path.basename(self.file_path))[0]
+        ext = os.path.splitext(self.file_path)[1].lower()
+        out_path = os.path.join(output_folder, f"{base}_{suffix}{ext}")
+
+        try:
+            if ext == '.csv':
+                self.df.to_csv(out_path, index=False)
+            elif ext == '.xlsx':
+                self.df.to_excel(out_path, index=False)
+            else:
+                # default to json
+                self.df.to_json(out_path, orient='records', indent=4)
+            self.log(f"💾 File Saved: {out_path}")
+            return out_path
+        except Exception as e:
+            self.log(f"❌ Save Error: {e}")
+            return None
 
     def remove_bsg(self):
         if self.df is not None and 'DIVISIONCODE' in self.df.columns:
+            initial = len(self.df)
             self.df = self.df[self.df['DIVISIONCODE'] != 'BSG']
-            self.log("Removed BSG rows."); self.save_df("no_bsg")
+            removed = initial - len(self.df)
+            self.log(f"Removed {removed} 'BSG' rows.")
+            self.save_df("removedbsg")
+        else:
+            messagebox.showwarning("Warning", "Data or 'DIVISIONCODE' column missing.")
 
     def filter_act(self):
         if self.df is not None and 'SUBSCRIBERSTATUSCODE' in self.df.columns:
             self.df = self.df[self.df['SUBSCRIBERSTATUSCODE'].astype(str).str.contains('ACT', na=False)]
-            self.log("Filtered ACT."); self.save_df("act_only")
+            self.log(f"Filtered to {len(self.df)} 'ACT' rows.")
+            self.save_df("actfiltered")
+        else:
+            messagebox.showwarning("Warning", "Data or 'SUBSCRIBERSTATUSCODE' column missing.")
 
-    def run_full_process_threaded(self):
-        if self.df is None: return
-        threading.Thread(target=self.run_full_process_logic, daemon=True).start()
+    def run_full_process(self):
+        if self.df is None:
+            messagebox.showwarning("Warning", "Load data first!")
+            return
 
-    def run_full_process_logic(self):
         try:
-            self.log("🚀 Processing Logic Started...")
-            self.progress['value'] = 10
+            self.log("🚀 Starting Full Process...")
+            self.progress['value'] = 5
+
             today = pd.to_datetime('today').normalize()
             yesterday = today - pd.Timedelta(days=1)
-            
-            # Dynamic Columns
-            dy_yest = f"{yesterday.strftime('%b%d').upper()} (STATUS)"
+
+            # Dynamic Headers
+            dy_yesterday = f"{yesterday.strftime('%b%d').upper()} (STATUS)"
             dy_today = f"{today.strftime('%b%d').upper()} (STATUS)"
             dy_hours = f"AGED (HOURS) - {today.strftime('%b%d').upper()}"
-            
-            for col in ['ALIGNED ACCT', 'ALIGNED JONO', 'SEGMENT', 'PRODUCT', 'AREA', 'MSP', dy_yest, dy_today, dy_hours]:
-                if col not in self.df.columns: self.df[col] = None
+            dy_bucket = f"AGED BUCKET - {today.strftime('%b%d').upper()}"
+            dy_group = f"AGED BUCKET GROUP - {today.strftime('%b%d').upper()}"
 
-            self.df['ALIGNED ACCT'] = self.df['ACCTNO'].astype(str).str.strip().str.zfill(13)
-            self.df['ALIGNED JONO'] = self.df['JONO'].astype(str).str.strip().str.zfill(8)
-            self.df['DATEJOCREATED'] = pd.to_datetime(self.df['DATEJOCREATED'], errors='coerce')
-            self.df['JOTODAY'] = (today - self.df['DATEJOCREATED']).dt.days
+            new_headers = ['ALIGNED ACCT', 'ALIGNED JONO', 'ACCT+JONO', 'SEGMENT', 'PRODUCT',
+                           'JOCRYEAR', 'DATE TODAY', 'JOTODAY', 'AGEING', 'AGEING (2)',
+                           'AREA', 'MSP', dy_yesterday, dy_today, 'JIRA TICKET STATUS',
+                           'ACTION TAKEN', 'FINAL STATUS', dy_hours, dy_bucket, dy_group]
 
-            # Segment Regex
-            if 'PACKAGENAME' in self.df.columns:
-                cond = [
-                    self.df['PACKAGENAME'].str.contains('BIDA', case=False, na=False),
-                    self.df['PACKAGENAME'].str.contains('S2S', case=False, na=False),
-                    self.df['PACKAGENAME'].str.contains(r'(AIR INTERNET|FIBER X|GAME CHANGER|HOME BASE)', case=False, na=False)
+            for col in new_headers:
+                if col not in self.df.columns:
+                    self.df[col] = None
+
+            self.log("Alignment & Date Calculations...")
+
+            # Safe creation of aligned account/jono
+            if 'ACCTNO' in self.df.columns:
+                self.df['ALIGNED ACCT'] = self.df['ACCTNO'].astype(str).str.strip().str.zfill(13)
+            else:
+                self.df['ALIGNED ACCT'] = None
+
+            if 'JONO' in self.df.columns:
+                self.df['ALIGNED JONO'] = self.df['JONO'].astype(str).str.strip().str.zfill(8)
+            else:
+                self.df['ALIGNED JONO'] = None
+
+            self.df['ACCT+JONO'] = self.df.apply(
+                lambda r: f"{r['ALIGNED ACCT']}:{r['ALIGNED JONO']}" if r.get('ALIGNED JONO') else None, axis=1
+            )
+
+            # DATEJOCREATED handling
+            if 'DATEJOCREATED' in self.df.columns:
+                self.df['DATEJOCREATED'] = pd.to_datetime(self.df['DATEJOCREATED'], errors='coerce')
+                self.df['JOCRYEAR'] = self.df['DATEJOCREATED'].dt.year
+                self.df['DATE TODAY'] = today
+                self.df['JOTODAY'] = (today - self.df['DATEJOCREATED']).dt.days
+            else:
+                self.df['DATEJOCREATED'] = pd.NaT
+                self.df['JOCRYEAR'] = None
+                self.df['DATE TODAY'] = today
+                self.df['JOTODAY'] = None
+
+            # --- SEGMENT & PRODUCT ---
+            if 'PACKAGENAME' in self.df.columns and 'PROVINCENAME' in self.df.columns:
+                self.log("Calculating SEGMENT and PRODUCT...")
+                conditions = [
+                    self.df['PACKAGENAME'].astype(str).str.contains('BIDA', case=False, na=False),
+                    self.df['PACKAGENAME'].astype(str).str.contains('S2S', case=False, na=False),
+                    self.df['PACKAGENAME'].astype(str).str.contains('SKY', case=False, na=False) & self.df['PROVINCENAME'].astype(str).str.contains('METRO MANILA', case=False, na=False),
+                    self.df['PACKAGENAME'].astype(str).str.contains('SKY', case=False, na=False),
+                    self.df['PACKAGENAME'].astype(str).str.contains('Biz', case=False, na=False),
+                    self.df['PACKAGENAME'].astype(str).str.contains('Streamtech', case=False, na=False),
+                    self.df['PACKAGENAME'].astype(str).str.contains(r'(AIR INTERNET|AIRONFIBER|FIBER X|FIBERX|GAME CHANGER|GAMECHANGER|HOME BASE|HOMEBASE|HYPERWIRE|BSS)', case=False, na=False)
                 ]
-                self.df['SEGMENT'] = np.select(cond, ["BIDA", "S2S", "RES"], default="OTHER")
-            
-            # MSP Lookup (Barangay -> City -> Province)
-            if self.map_full_df is not None:
-                self.log("Mapping MSP tiers...")
-                # Tier 3 (Province) fallback
-                p_map = dict(zip(self.map_full_df.iloc[:,4].str.lower(), self.map_full_df.iloc[:,8]))
-                self.df['MSP'] = self.df['PROVINCENAME'].str.lower().map(p_map)
+
+                segment_choices = ["BIDA", "S2S", "SKYNCR", "SKY REGIONAL", "SME", "Streamtech", "RES"]
+                self.df['SEGMENT'] = np.select(conditions, segment_choices, default=None)
+
+                product_choices = ["BIDA", "S2S", "SKY", "SKY", "FIBER", "Streamtech", "FIBER"]
+                self.df['PRODUCT'] = np.select(conditions, product_choices, default=None)
+
+                self.df.loc[self.df['PACKAGENAME'].isna(), ['SEGMENT', 'PRODUCT']] = None
+            else:
+                self.log("⚠️ Warning: Missing PACKAGENAME/PROVINCENAME. Skipping Segment/Product logic.")
+
+            self.progress['value'] = 40
+
+            # Ageing
+            self.log("Applying Ageing Buckets...")
+            if 'JOTODAY' in self.df.columns and self.df['JOTODAY'].notna().any():
+                # ensure numeric
+                self.df['JOTODAY'] = pd.to_numeric(self.df['JOTODAY'], errors='coerce')
+                self.df['AGEING'] = np.select(
+                    [self.df['JOTODAY'] <= 1, self.df['JOTODAY'] <= 3, self.df['JOTODAY'] <= 5, self.df['JOTODAY'] <= 15, self.df['JOTODAY'] <= 30, self.df['JOTODAY'] <= 60, self.df['JOTODAY'] > 60],
+                    ["0-1 D", "2-3 D", "3-5 D", "5-15 D", "15-30 D", "30-60 D", "> 60 D"], default=None)
+                self.df['AGEING (2)'] = np.select(
+                    [self.df['JOTODAY'] <= 5, self.df['JOTODAY'] <= 15, self.df['JOTODAY'] <= 30, self.df['JOTODAY'] <= 60, self.df['JOTODAY'] > 60],
+                    ["0-5 D", "5-15 D", "15-30 D", "30-60 D", "> 60 D"], default=None)
+                self.df[dy_hours] = self.df['JOTODAY'] * 24
+            else:
+                self.df['AGEING'] = None
+                self.df['AGEING (2)'] = None
+                self.df[dy_hours] = None
+
+            self.df[dy_bucket] = today.strftime('%d-%b')
+            self.df[dy_group] = self.df['AGEING (2)']
+
+            # Area Mapping
+            if self.map_df is not None and 'PROVINCENAME' in self.df.columns:
+                self.log("Mapping AREA...")
+                area_dict = self.map_df.set_index('PROVINCENAME')['REGION'].to_dict()
+                # map with case-insensitive matching
+                self.df['AREA'] = self.df['PROVINCENAME'].astype(str).map(lambda x: area_dict.get(x, None))
+            else:
+                self.log("Area mapping skipped (MAP.csv missing or PROVINCENAME not in data).")
+
+            # MSP Logic
+            if self.map_full_df is not None and 'PROVINCENAME' in self.df.columns:
+                self.log("Starting Complex MSP Lookups...")
+                self.df['MSP'] = None
+                p_mask = self.df['PROVINCENAME'].notna() & (self.df['PROVINCENAME'].astype(str).str.strip() != '')
+
+                # 1. Holy Spirit (example)
+                try:
+                    if 'BARANGAYNAME' in self.df.columns and self.map_full_df.shape[1] > 8:
+                        cond1 = (self.df['BARANGAYNAME'].astype(str).str.lower() == 'holy spirit') & \
+                                (self.df['PROVINCENAME'].astype(str).str.lower().str.contains('metro manila', na=False))
+                        map_f_i = self.map_full_df.iloc[:, [5, 8]].dropna().copy()
+                        map_f_i.columns = ['k', 'v']
+                        map_f_i['k'] = map_f_i['k'].astype(str).str.lower().str.strip()
+                        h_dict = dict(zip(map_f_i['k'], map_f_i['v']))
+                        self.df.loc[p_mask & cond1, 'MSP'] = self.df.loc[p_mask & cond1, 'BARANGAYNAME'].astype(str).str.lower().map(h_dict)
+                except Exception as e:
+                    self.log(f"MSP step 1 error: {e}")
+
+                # 2. Province | Municipality
+                try:
+                    m_mask = p_mask & self.df['MSP'].isna()
+                    if 'MUNICIPALITYNAME' in self.df.columns and self.map_full_df.shape[1] > 8:
+                        df_key = (self.df['PROVINCENAME'].astype(str).str.lower().str.strip() + '|' +
+                                  self.df['MUNICIPALITYNAME'].astype(str).str.lower().str.strip())
+                        map_e_g_i = self.map_full_df.iloc[:, [4, 6, 8]].dropna().copy()
+                        map_e_g_i['key'] = map_e_g_i.iloc[:, 0].astype(str).str.lower().str.strip() + '|' + map_e_g_i.iloc[:, 1].astype(str).str.lower().str.strip()
+                        m_dict = dict(zip(map_e_g_i['key'], map_e_g_i.iloc[:, 2]))
+                        self.df.loc[m_mask, 'MSP'] = df_key.loc[m_mask].map(m_dict)
+                except Exception as e:
+                    self.log(f"MSP step 2 error: {e}")
+
+                # 3. Province Only
+                try:
+                    m_mask = p_mask & self.df['MSP'].isna()
+                    map_e_i = self.map_full_df.iloc[:, [4, 8]].dropna().copy()
+                    map_e_i.columns = ['k', 'v']
+                    map_e_i['k'] = map_e_i['k'].astype(str).str.lower().str.strip()
+                    p_dict = dict(zip(map_e_i['k'], map_e_i['v']))
+                    self.df.loc[m_mask, 'MSP'] = self.df.loc[m_mask, 'PROVINCENAME'].astype(str).str.lower().str.strip().map(p_dict)
+                except Exception as e:
+                    self.log(f"MSP step 3 error: {e}")
+
+            else:
+                self.log("MSP mapping skipped (MAP.csv missing or PROVINCENAME not in data).")
+
+            # Fill MSP blanks with empty string for consistency
+            if 'MSP' in self.df.columns:
+                self.df['MSP'] = self.df['MSP'].fillna('')
 
             self.progress['value'] = 90
-            self.save_df("full_processed")
+            self.save_df("processed")
             self.progress['value'] = 100
-            self.log("✅ Finished.")
-        except Exception as e: self.log(f"❌ Error: {e}")
+            self.log("✅ ALL CALCULATIONS COMPLETE.")
+            messagebox.showinfo("Done", "Processing successful!")
+
+        except Exception as e:
+            self.log(f"❌ Error: {e}")
+            messagebox.showerror("Error", f"Processing failed: {e}")
 
 # =============================================================================
-# TAB 3: EXCEL TO CSV
+# TAB 3: XLSX TO CSV CONVERTER
 # =============================================================================
 class ExcelToCsvConverter:
     def __init__(self, parent):
@@ -309,45 +627,144 @@ class ExcelToCsvConverter:
     def setup_ui(self):
         main = ttk.Frame(self.parent, padding="20")
         main.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(main, text="Excel File:").grid(row=0, column=0, sticky="w")
-        self.ent = ttk.Entry(main, width=40); self.ent.grid(row=0, column=1)
-        ttk.Button(main, text="Browse", command=self.load).grid(row=0, column=2)
-        self.sheets = tk.Listbox(main, height=5); self.sheets.grid(row=1, column=1, sticky="ew", pady=10)
-        ttk.Button(main, text="Convert All", command=self.convert).grid(row=2, column=1)
 
-    def load(self):
-        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx")])
-        if path:
-            self.ent.delete(0, tk.END); self.ent.insert(0, path)
-            wb = load_workbook(path, read_only=True)
-            self.sheets.delete(0, tk.END)
-            for s in wb.sheetnames: self.sheets.insert(tk.END, s)
+        # File Selection
+        ttk.Label(main, text="Excel File (.xlsx):").grid(row=0, column=0, sticky="w", pady=5)
+        self.entry_file = ttk.Entry(main, width=50)
+        self.entry_file.grid(row=0, column=1, pady=5)
+        ttk.Button(main, text="Browse", command=self.select_file).grid(row=0, column=2, padx=5)
+
+        # Output Selection
+        ttk.Label(main, text="Output Folder:").grid(row=1, column=0, sticky="w", pady=5)
+        self.entry_output = ttk.Entry(main, width=50)
+        self.entry_output.grid(row=1, column=1, pady=5)
+        ttk.Button(main, text="Browse", command=self.select_output_dir).grid(row=1, column=2, padx=5)
+
+        # Sheet List
+        ttk.Label(main, text="Sheet Names:").grid(row=2, column=0, sticky="nw", pady=10)
+        self.sheet_list = tk.Listbox(main, height=6, width=50, selectmode=tk.SINGLE)
+        self.sheet_list.grid(row=2, column=1, pady=10)
+
+        # Buttons
+        btn_frame = ttk.Frame(main)
+        btn_frame.grid(row=3, column=1, pady=5)
+        ttk.Button(btn_frame, text="Preview Selected Sheet", command=self.preview_sheet).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Convert All / Selected", command=self.convert).pack(side=tk.LEFT, padx=5)
+
+        # Preview Area
+        self.preview_text = tk.Text(main, height=10, width=60, bg="#f9f9f9")
+        self.preview_text.grid(row=4, column=0, columnspan=3, padx=10, pady=15)
+
+        # Make layout responsive
+        main.columnconfigure(1, weight=1)
+
+    def select_file(self):
+        file_path = filedialog.askopenfilename(title="Select Excel File", filetypes=[("Excel files", "*.xlsx")])
+        if file_path:
+            self.entry_file.delete(0, tk.END)
+            self.entry_file.insert(0, file_path)
+            self.load_sheets(file_path)
+
+    def select_output_dir(self):
+        dir_path = filedialog.askdirectory(title="Select Output Folder")
+        if dir_path:
+            self.entry_output.delete(0, tk.END)
+            self.entry_output.insert(0, dir_path)
+
+    def load_sheets(self, file_path):
+        try:
+            wb = load_workbook(file_path, read_only=True, data_only=True)
+            self.sheet_list.delete(0, tk.END)
+            for sheet in wb.sheetnames:
+                self.sheet_list.insert(tk.END, sheet)
+            wb.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read sheets: {e}")
+
+    def xlsx_to_csv_stream(self, xlsx_file, output_dir, sheet_name=None):
+        try:
+            wb = load_workbook(xlsx_file, read_only=True, data_only=True)
+            sheets = [sheet_name] if sheet_name else wb.sheetnames
+            for sheet in sheets:
+                ws = wb[sheet]
+                # sanitize sheet name for filename
+                safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in sheet).strip()
+                csv_file = os.path.join(output_dir, f"{safe_name}.csv")
+                with open(csv_file, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    for row in ws.iter_rows(values_only=True):
+                        writer.writerow([("" if v is None else v) for v in row])
+            wb.close()
+            return True, f"Converted {len(sheets)} sheet(s) to CSV in {output_dir}"
+        except Exception as e:
+            return False, str(e)
+
+    def preview_sheet(self):
+        xlsx_file = self.entry_file.get()
+        selected = self.sheet_list.curselection()
+        if not xlsx_file or not selected:
+            messagebox.showerror("Error", "Please select a file and sheet first.")
+            return
+
+        sheet_name = self.sheet_list.get(selected[0])
+        try:
+            wb = load_workbook(xlsx_file, read_only=True, data_only=True)
+            ws = wb[sheet_name]
+            self.preview_text.delete("1.0", tk.END)
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                self.preview_text.insert(tk.END, f"{row}\n")
+                if i >= 4:
+                    break  # Limit preview
+            wb.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Preview failed: {e}")
 
     def convert(self):
-        path = self.ent.get()
-        out_dir = filedialog.askdirectory()
-        if path and out_dir:
-            wb = load_workbook(path, data_only=True)
-            for s in wb.sheetnames:
-                ws = wb[s]
-                with open(os.path.join(out_dir, f"{s}.csv"), 'w', newline='', encoding='utf-8') as f:
-                    writer = csv.writer(f)
-                    for r in ws.iter_rows(values_only=True): writer.writerow(r)
-            messagebox.showinfo("Success", "Done!")
+        xlsx_file = self.entry_file.get()
+        output_dir = self.entry_output.get()
+        selected = self.sheet_list.curselection()
+        sheet_name = self.sheet_list.get(selected[0]) if selected else None
+
+        if not xlsx_file or not output_dir:
+            messagebox.showerror("Error", "Please select both input file and output folder.")
+            return
+
+        success, msg = self.xlsx_to_csv_stream(xlsx_file, output_dir, sheet_name)
+        if success:
+            messagebox.showinfo("Success", msg)
+        else:
+            messagebox.showerror("Error", msg)
 
 # =============================================================================
-# MAIN
+# MAIN APP LAUNCHER
 # =============================================================================
 class MainApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Data Toolbox Pro")
-        self.root.geometry("800x700")
-        nb = ttk.Notebook(root)
-        nb.pack(fill=tk.BOTH, expand=True)
-        t1, t2, t3 = ttk.Frame(nb), ttk.Frame(nb), ttk.Frame(nb)
-        nb.add(t1, text=" CSV Merger "); nb.add(t2, text=" Data Processor "); nb.add(t3, text=" Excel to CSV ")
-        SimpleCSVMerger(t1); DataProcessorGUI(t2); ExcelToCsvConverter(t3)
+        self.root.title("Jester's Data Toolbox")
+        self.root.geometry("900x760")
+
+        # Create the Tab Container (Notebook)
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        # Create Frames for each tab
+        self.tab1 = ttk.Frame(self.notebook)
+        self.tab2 = ttk.Frame(self.notebook)
+        self.tab3 = ttk.Frame(self.notebook)
+
+        # Add tabs to notebook
+        self.notebook.add(self.tab1, text=" CSV Merger ")
+        self.notebook.add(self.tab2, text=" Data Processor ")
+        self.notebook.add(self.tab3, text=" Excel to CSV ")
+
+        # Initialize the tools inside their respective tabs
+        SimpleCSVMerger(self.tab1)
+        DataProcessorGUI(self.tab2)
+        ExcelToCsvConverter(self.tab3)
+
 
 if __name__ == "__main__":
-    root = tk.Tk(); app = MainApp(root); root.mainloop()
+    root = tk.Tk()
+    app = MainApp(root)
+    root.mainloop()
