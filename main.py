@@ -1,20 +1,35 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Updated CSV merger, data processor, and Excel-to-CSV converter with Windows 10/11 styling
+and an Excel-like scrollable preview using ttk.Treeview.
+
+Drop this file into your project and run with Python 3.8+.
+"""
+
+import os
+import threading
+import warnings
+from datetime import datetime
+
+import chardet
+import numpy as np
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, scrolledtext
-import chardet
-import os
-import threading
-import numpy as np
-import warnings
-import csv
-from datetime import datetime
+
 from openpyxl import load_workbook
+
+# Optional Windows DPI helpers
+import platform
+import ctypes
 
 # Settings
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
+
 # =============================================================================
-# TAB 1: CSV MERGER
+# TAB 1: CSV MERGER (Updated with Windows styling and Treeview preview)
 # =============================================================================
 class SimpleCSVMerger:
     def __init__(self, parent):
@@ -27,94 +42,134 @@ class SimpleCSVMerger:
         self.pull_vars = {}
         self.checkbox_widgets = []
 
+        # Preview widgets
+        self.preview_tree = None
+        self.preview_vscroll = None
+        self.preview_hscroll = None
+
         self.setup_ui()
 
+    # -------------------------
+    # UI and styling
+    # -------------------------
     def setup_ui(self):
-        main = ttk.Frame(self.parent, padding="15")
+        # Apply Windows-like style and fonts
+        self.setup_style()
+
+        main = ttk.Frame(self.parent, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
 
         # --- 1. File Selection ---
-        ttk.Label(main, text="1. Select CSV Files", font=('Arial', 10, 'bold')).pack(anchor=tk.W)
+        ttk.Label(main, text="1. Select CSV Files", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
         f_frame = ttk.Frame(main)
-        f_frame.pack(fill=tk.X, pady=5)
+        f_frame.pack(fill=tk.X, pady=6)
 
-        self.file1_path = ttk.Entry(f_frame)
+        self.file1_path = ttk.Entry(f_frame, font=('Segoe UI', 9))
         self.file1_path.pack(fill=tk.X, pady=2)
-        ttk.Button(f_frame, text="Browse Primary File", command=lambda: self.browse(1)).pack(fill=tk.X)
+        ttk.Button(f_frame, text="Browse Primary File", command=lambda: self.browse(1)).pack(fill=tk.X, pady=2)
 
-        self.file2_path = ttk.Entry(f_frame)
-        self.file2_path.pack(fill=tk.X, pady=(10, 2))
-        ttk.Button(f_frame, text="Browse Source File", command=lambda: self.browse(2)).pack(fill=tk.X)
+        self.file2_path = ttk.Entry(f_frame, font=('Segoe UI', 9))
+        self.file2_path.pack(fill=tk.X, pady=(8, 2))
+        ttk.Button(f_frame, text="Browse Source File", command=lambda: self.browse(2)).pack(fill=tk.X, pady=2)
 
         # --- 2. Matching with Search ---
-        ttk.Label(main, text="2. Join Keys (Searchable)", font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        ttk.Label(main, text="2. Join Keys (Searchable)", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
         m_frame = ttk.Frame(main)
-        m_frame.pack(fill=tk.X, pady=5)
+        m_frame.pack(fill=tk.X, pady=6)
 
-        # Search Entry for File 1 Keys
         self.s1_var = tk.StringVar()
         self.s1_var.trace_add("write", lambda *a: self.filter_key_list(1))
-        ttk.Entry(m_frame, textvariable=self.s1_var, font=('Arial', 8, 'italic')).grid(row=0, column=0, sticky="ew")
+        ttk.Entry(m_frame, textvariable=self.s1_var, font=('Segoe UI', 9, 'italic')).grid(row=0, column=0, sticky="ew")
         self.match_f1 = ttk.Combobox(m_frame, state="readonly", width=40)
-        self.match_f1.grid(row=1, column=0, padx=5)
+        self.match_f1.grid(row=1, column=0, padx=5, sticky="ew")
 
-        ttk.Label(m_frame, text="↔").grid(row=1, column=1)
+        ttk.Label(m_frame, text="↔", font=('Segoe UI', 10)).grid(row=1, column=1, padx=6)
 
-        # Search Entry for File 2 Keys
         self.s2_var = tk.StringVar()
         self.s2_var.trace_add("write", lambda *a: self.filter_key_list(2))
-        ttk.Entry(m_frame, textvariable=self.s2_var, font=('Arial', 8, 'italic')).grid(row=0, column=2, sticky="ew")
+        ttk.Entry(m_frame, textvariable=self.s2_var, font=('Segoe UI', 9, 'italic')).grid(row=0, column=2, sticky="ew")
         self.match_f2 = ttk.Combobox(m_frame, state="readonly", width=40)
-        self.match_f2.grid(row=1, column=2, padx=5)
+        self.match_f2.grid(row=1, column=2, padx=5, sticky="ew")
 
-        # Make columns expand nicely
         m_frame.columnconfigure(0, weight=1)
         m_frame.columnconfigure(2, weight=1)
 
         # --- 3. Columns to Pull ---
-        ttk.Label(main, text="3. Columns to Pull", font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        ttk.Label(main, text="3. Columns to Pull", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
         ctrl = ttk.Frame(main)
-        ctrl.pack(fill=tk.X, pady=5)
+        ctrl.pack(fill=tk.X, pady=6)
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", self.filter_checkboxes)
-        ttk.Entry(ctrl, textvariable=self.search_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        ttk.Button(ctrl, text="All", width=5, command=self.select_all).pack(side=tk.LEFT, padx=2)
-        ttk.Button(ctrl, text="None", width=5, command=self.deselect_all).pack(side=tk.LEFT)
+        ttk.Entry(ctrl, textvariable=self.search_var, font=('Segoe UI', 9)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        ttk.Button(ctrl, text="All", width=6, command=self.select_all).pack(side=tk.LEFT, padx=4)
+        ttk.Button(ctrl, text="None", width=6, command=self.deselect_all).pack(side=tk.LEFT)
 
         # Scrollable checkbox area
         canvas_frame = ttk.Frame(main)
-        canvas_frame.pack(fill=tk.BOTH, expand=False, pady=5)
-        self.check_canvas = tk.Canvas(canvas_frame, bg="white", height=150, highlightthickness=1)
+        canvas_frame.pack(fill=tk.BOTH, expand=False, pady=6)
+        self.check_canvas = tk.Canvas(canvas_frame, bg="white", height=140, highlightthickness=1)
         self.check_scroll = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.check_canvas.yview)
         self.check_frame = ttk.Frame(self.check_canvas)
         self.check_canvas.create_window((0, 0), window=self.check_frame, anchor="nw")
         self.check_canvas.configure(yscrollcommand=self.check_scroll.set)
-
-        # Layout: canvas left, scrollbar right
         self.check_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.check_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Keep scrollregion updated
         self.check_frame.bind("<Configure>", lambda e: self.check_canvas.configure(scrollregion=self.check_canvas.bbox("all")))
 
         # --- 4. Actions & Preview ---
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=tk.X, pady=10)
         self.prev_btn = ttk.Button(btn_frame, text="PREVIEW DATA", command=self.show_preview, state=tk.DISABLED)
-        self.prev_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        self.prev_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
         self.merge_btn = ttk.Button(btn_frame, text="SAVE MERGED FILE", command=self.process_merge, state=tk.DISABLED)
-        self.merge_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        self.merge_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
 
-        self.preview_box = tk.Text(main, height=12, font=("Courier New", 9), bg="#f8f8f8")
-        self.preview_box.pack(fill=tk.BOTH, expand=True)
+        # Replace Text preview with Treeview (Excel-like)
+        preview_label = ttk.Label(main, text="Preview (top rows)", font=('Segoe UI', 10, 'bold'))
+        preview_label.pack(anchor=tk.W, pady=(6, 0))
+
+        self.preview_frame = ttk.Frame(main, relief=tk.SOLID)
+        self.preview_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
         # --- 5. Status & Progress ---
         self.prog = ttk.Progressbar(main, mode='determinate')
-        self.prog.pack(fill=tk.X, pady=5)
+        self.prog.pack(fill=tk.X, pady=6)
         self.stat_var = tk.StringVar(value="Ready")
         self.stat_bar = ttk.Label(main, textvariable=self.stat_var, relief=tk.SUNKEN, anchor=tk.W)
         self.stat_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
+    def setup_style(self):
+        style = ttk.Style()
+        # Prefer Windows-like theme on Windows
+        try:
+            if 'vista' in style.theme_names():
+                style.theme_use('vista')
+            elif 'xpnative' in style.theme_names():
+                style.theme_use('xpnative')
+            else:
+                style.theme_use('clam')
+        except Exception:
+            style.theme_use('clam')
+
+        # Global font and padding
+        default_font = ('Segoe UI', 9)
+        style.configure('.', font=default_font)
+        style.configure('TButton', padding=(6, 4))
+        style.configure('TEntry', padding=(4, 4))
+        style.configure('Treeview', font=('Segoe UI', 9), rowheight=22)
+        style.configure('Treeview.Heading', font=('Segoe UI', 9, 'bold'))
+
+        # Attempt to set scaling for high DPI on Windows
+        try:
+            if platform.system() == 'Windows':
+                # set a reasonable scaling for high DPI monitors
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
+
+    # -------------------------
+    # File loading & detection
+    # -------------------------
     def detect_enc(self, path):
         try:
             with open(path, 'rb') as f:
@@ -178,6 +233,9 @@ class SimpleCSVMerger:
             self.prev_btn.config(state=tk.NORMAL)
             self.merge_btn.config(state=tk.NORMAL)
 
+    # -------------------------
+    # UI helpers
+    # -------------------------
     def filter_key_list(self, num):
         term = self.s1_var.get().lower() if num == 1 else self.s2_var.get().lower()
         full = self.all_cols_f1 if num == 1 else self.all_cols_f2
@@ -190,7 +248,6 @@ class SimpleCSVMerger:
             else:
                 target.set('')
         except Exception:
-            # ignore if current can't be set
             target.set('')
 
     def filter_checkboxes(self, *args):
@@ -213,7 +270,6 @@ class SimpleCSVMerger:
                 if var is None:
                     var = tk.BooleanVar(value=False)
                     self.pull_vars[col] = var
-                # Use ttk.Checkbutton for consistent styling
                 cb = ttk.Checkbutton(self.check_frame, text=col, variable=var)
                 cb.pack(fill=tk.X, padx=5, pady=1)
                 self.checkbox_widgets.append(cb)
@@ -229,6 +285,9 @@ class SimpleCSVMerger:
         for v in self.pull_vars.values():
             v.set(False)
 
+    # -------------------------
+    # Merge logic
+    # -------------------------
     def perform_merge(self):
         k1 = self.match_f1.get().strip()
         k2 = self.match_f2.get().strip()
@@ -278,17 +337,117 @@ class SimpleCSVMerger:
             messagebox.showerror("Merge Error", f"Error during merge: {str(e)}")
             return None
 
+    # -------------------------
+    # Preview (Treeview)
+    # -------------------------
+    def populate_treeview_from_df(self, df, max_rows=200):
+        # Clear existing tree if present
+        if self.preview_tree:
+            try:
+                self.preview_tree.destroy()
+            except Exception:
+                pass
+        if self.preview_vscroll:
+            try:
+                self.preview_vscroll.destroy()
+            except Exception:
+                pass
+        if self.preview_hscroll:
+            try:
+                self.preview_hscroll.destroy()
+            except Exception:
+                pass
+
+        cols = list(df.columns)
+        if not cols:
+            # nothing to show
+            return
+
+        # Create treeview
+        self.preview_tree = ttk.Treeview(self.preview_frame, columns=cols, show='headings')
+        self.preview_vscroll = ttk.Scrollbar(self.preview_frame, orient='vertical', command=self.preview_tree.yview)
+        self.preview_hscroll = ttk.Scrollbar(self.preview_frame, orient='horizontal', command=self.preview_tree.xview)
+        self.preview_tree.configure(yscrollcommand=self.preview_vscroll.set, xscrollcommand=self.preview_hscroll.set)
+
+        # Grid layout
+        self.preview_tree.grid(row=0, column=0, sticky='nsew')
+        self.preview_vscroll.grid(row=0, column=1, sticky='ns')
+        self.preview_hscroll.grid(row=1, column=0, sticky='ew')
+        self.preview_frame.columnconfigure(0, weight=1)
+        self.preview_frame.rowconfigure(0, weight=1)
+
+        # Setup headings and column widths based on header and sample values
+        sample = df.head(max_rows)
+        for c in cols:
+            # estimate width: header length and sample content
+            try:
+                max_sample_len = int(sample[c].astype(str).map(len).max()) if not sample.empty else 0
+            except Exception:
+                max_sample_len = 0
+            header_len = len(str(c))
+            est = min(max(80, (max(header_len, max_sample_len) * 7)), 400)  # px estimate
+            self.preview_tree.heading(c, text=c)
+            self.preview_tree.column(c, width=est, anchor='w', stretch=True)
+
+        # Insert rows (limit to max_rows)
+        for idx, row in sample.iterrows():
+            values = [self._safe_display_value(row.get(c)) for c in cols]
+            self.preview_tree.insert('', 'end', values=values)
+
+        # Allow copying cell text on double-click
+        self.preview_tree.bind("<Double-1>", self._on_treeview_double_click)
+
+    def _safe_display_value(self, v):
+        if pd.isna(v):
+            return ''
+        return str(v)
+
+    def _on_treeview_double_click(self, event):
+        # Copy the clicked cell value to clipboard
+        tree = self.preview_tree
+        if tree is None:
+            return
+        item = tree.identify_row(event.y)
+        col = tree.identify_column(event.x)
+        if not item or not col:
+            return
+        try:
+            col_index = int(col.replace('#', '')) - 1
+            vals = tree.item(item, 'values')
+            if col_index < len(vals):
+                val = vals[col_index]
+                root = self.parent.winfo_toplevel()
+                root.clipboard_clear()
+                root.clipboard_append(val)
+                self.stat_var.set("Copied cell to clipboard.")
+        except Exception:
+            pass
+
     def show_preview(self):
         res = self.perform_merge()
         if res is not None:
-            self.preview_box.delete(1.0, tk.END)
+            # Use only top N rows for preview to keep UI responsive
+            preview_rows = 200
             try:
-                self.preview_box.insert(tk.END, res.head(20).to_string())
-            except Exception:
-                # fallback to repr
-                self.preview_box.insert(tk.END, repr(res.head(20)))
+                self.populate_treeview_from_df(res.head(preview_rows), max_rows=preview_rows)
+                self.stat_var.set(f"Previewing top {min(len(res), preview_rows)} rows.")
+            except Exception as e:
+                # fallback to text preview if treeview fails
+                try:
+                    for w in self.preview_frame.winfo_children():
+                        w.destroy()
+                except Exception:
+                    pass
+                fallback = tk.Text(self.preview_frame, height=12, font=("Courier New", 9), bg="#f8f8f8")
+                fallback.pack(fill=tk.BOTH, expand=True)
+                fallback.delete(1.0, tk.END)
+                fallback.insert(tk.END, repr(res.head(20)))
+                self.stat_var.set("Preview fallback to text due to error.")
             self.prog['value'] = 100
 
+    # -------------------------
+    # Save merged result
+    # -------------------------
     def process_merge(self):
         res = self.perform_merge()
         if res is not None:
@@ -303,8 +462,9 @@ class SimpleCSVMerger:
                     messagebox.showerror("Save Error", f"Failed to save file: {e}")
             self.prog['value'] = 0
 
+
 # =============================================================================
-# TAB 2: DATA PROCESSOR
+# TAB 2: DATA PROCESSOR (mostly unchanged)
 # =============================================================================
 class DataProcessorGUI:
     def __init__(self, parent):
@@ -616,12 +776,15 @@ class DataProcessorGUI:
             self.log(f"❌ Error: {e}")
             messagebox.showerror("Error", f"Processing failed: {e}")
 
+
 # =============================================================================
-# TAB 3: XLSX TO CSV CONVERTER
+# TAB 3: XLSX TO CSV CONVERTER (completed)
 # =============================================================================
 class ExcelToCsvConverter:
     def __init__(self, parent):
         self.parent = parent
+        self.file_path = None
+        self.output_folder = None
         self.setup_ui()
 
     def setup_ui(self):
@@ -631,140 +794,126 @@ class ExcelToCsvConverter:
         # File Selection
         ttk.Label(main, text="Excel File (.xlsx):").grid(row=0, column=0, sticky="w", pady=5)
         self.entry_file = ttk.Entry(main, width=50)
-        self.entry_file.grid(row=0, column=1, pady=5)
+        self.entry_file.grid(row=0, column=1, pady=5, sticky="ew")
         ttk.Button(main, text="Browse", command=self.select_file).grid(row=0, column=2, padx=5)
 
         # Output Selection
         ttk.Label(main, text="Output Folder:").grid(row=1, column=0, sticky="w", pady=5)
         self.entry_output = ttk.Entry(main, width=50)
-        self.entry_output.grid(row=1, column=1, pady=5)
-        ttk.Button(main, text="Browse", command=self.select_output_dir).grid(row=1, column=2, padx=5)
+        self.entry_output.grid(row=1, column=1, pady=5, sticky="ew")
+        ttk.Button(main, text="Browse", command=self.select_output).grid(row=1, column=2, padx=5)
 
-        # Sheet List
-        ttk.Label(main, text="Sheet Names:").grid(row=2, column=0, sticky="nw", pady=10)
-        self.sheet_list = tk.Listbox(main, height=6, width=50, selectmode=tk.SINGLE)
-        self.sheet_list.grid(row=2, column=1, pady=10)
+        # Options
+        self.split_sheets_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(main, text="Export each sheet to separate CSV", variable=self.split_sheets_var).grid(row=2, column=1, sticky="w", pady=6)
 
-        # Buttons
-        btn_frame = ttk.Frame(main)
-        btn_frame.grid(row=3, column=1, pady=5)
-        ttk.Button(btn_frame, text="Preview Selected Sheet", command=self.preview_sheet).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Convert All / Selected", command=self.convert).pack(side=tk.LEFT, padx=5)
+        # Convert button
+        ttk.Button(main, text="Convert", command=self.convert).grid(row=3, column=1, pady=10)
 
-        # Preview Area
-        self.preview_text = tk.Text(main, height=10, width=60, bg="#f9f9f9")
-        self.preview_text.grid(row=4, column=0, columnspan=3, padx=10, pady=15)
+        # Status / log
+        self.status_label = ttk.Label(main, text="No file selected", foreground="gray")
+        self.status_label.grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
-        # Make layout responsive
         main.columnconfigure(1, weight=1)
 
     def select_file(self):
-        file_path = filedialog.askopenfilename(title="Select Excel File", filetypes=[("Excel files", "*.xlsx")])
-        if file_path:
+        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        if path:
+            self.file_path = path
             self.entry_file.delete(0, tk.END)
-            self.entry_file.insert(0, file_path)
-            self.load_sheets(file_path)
+            self.entry_file.insert(0, path)
+            self.status_label.config(text=f"Selected: {os.path.basename(path)}", foreground="#007bff")
 
-    def select_output_dir(self):
-        dir_path = filedialog.askdirectory(title="Select Output Folder")
-        if dir_path:
+    def select_output(self):
+        folder = filedialog.askdirectory()
+        if folder:
+            self.output_folder = folder
             self.entry_output.delete(0, tk.END)
-            self.entry_output.insert(0, dir_path)
-
-    def load_sheets(self, file_path):
-        try:
-            wb = load_workbook(file_path, read_only=True, data_only=True)
-            self.sheet_list.delete(0, tk.END)
-            for sheet in wb.sheetnames:
-                self.sheet_list.insert(tk.END, sheet)
-            wb.close()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to read sheets: {e}")
-
-    def xlsx_to_csv_stream(self, xlsx_file, output_dir, sheet_name=None):
-        try:
-            wb = load_workbook(xlsx_file, read_only=True, data_only=True)
-            sheets = [sheet_name] if sheet_name else wb.sheetnames
-            for sheet in sheets:
-                ws = wb[sheet]
-                # sanitize sheet name for filename
-                safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in sheet).strip()
-                csv_file = os.path.join(output_dir, f"{safe_name}.csv")
-                with open(csv_file, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    for row in ws.iter_rows(values_only=True):
-                        writer.writerow([("" if v is None else v) for v in row])
-            wb.close()
-            return True, f"Converted {len(sheets)} sheet(s) to CSV in {output_dir}"
-        except Exception as e:
-            return False, str(e)
-
-    def preview_sheet(self):
-        xlsx_file = self.entry_file.get()
-        selected = self.sheet_list.curselection()
-        if not xlsx_file or not selected:
-            messagebox.showerror("Error", "Please select a file and sheet first.")
-            return
-
-        sheet_name = self.sheet_list.get(selected[0])
-        try:
-            wb = load_workbook(xlsx_file, read_only=True, data_only=True)
-            ws = wb[sheet_name]
-            self.preview_text.delete("1.0", tk.END)
-            for i, row in enumerate(ws.iter_rows(values_only=True)):
-                self.preview_text.insert(tk.END, f"{row}\n")
-                if i >= 4:
-                    break  # Limit preview
-            wb.close()
-        except Exception as e:
-            messagebox.showerror("Error", f"Preview failed: {e}")
+            self.entry_output.insert(0, folder)
 
     def convert(self):
-        xlsx_file = self.entry_file.get()
-        output_dir = self.entry_output.get()
-        selected = self.sheet_list.curselection()
-        sheet_name = self.sheet_list.get(selected[0]) if selected else None
-
-        if not xlsx_file or not output_dir:
-            messagebox.showerror("Error", "Please select both input file and output folder.")
+        if not self.file_path:
+            messagebox.showwarning("No file", "Please select an Excel file to convert.")
             return
+        out_folder = self.output_folder or os.path.join(os.path.dirname(self.file_path), "converted_csvs")
+        os.makedirs(out_folder, exist_ok=True)
 
-        success, msg = self.xlsx_to_csv_stream(xlsx_file, output_dir, sheet_name)
-        if success:
-            messagebox.showinfo("Success", msg)
-        else:
-            messagebox.showerror("Error", msg)
+        try:
+            wb = load_workbook(self.file_path, read_only=True, data_only=True)
+            sheets = wb.sheetnames
+            exported = []
+            if self.split_sheets_var.get():
+                for sheet in sheets:
+                    ws = wb[sheet]
+                    rows = list(ws.values)
+                    if not rows:
+                        continue
+                    # Use first row as header if it looks like headers
+                    header = [str(c) if c is not None else "" for c in rows[0]]
+                    data_rows = rows[1:] if len(rows) > 1 else []
+                    df = pd.DataFrame(data_rows, columns=header)
+                    out_name = os.path.join(out_folder, f"{os.path.splitext(os.path.basename(self.file_path))[0]}_{sheet}.csv")
+                    df.to_csv(out_name, index=False, encoding='utf-8-sig')
+                    exported.append(out_name)
+            else:
+                # Combine all sheets vertically with sheet name column
+                combined = []
+                for sheet in sheets:
+                    ws = wb[sheet]
+                    rows = list(ws.values)
+                    if not rows:
+                        continue
+                    header = [str(c) if c is not None else "" for c in rows[0]]
+                    data_rows = rows[1:] if len(rows) > 1 else []
+                    df = pd.DataFrame(data_rows, columns=header)
+                    df['__sheet__'] = sheet
+                    combined.append(df)
+                if combined:
+                    big = pd.concat(combined, ignore_index=True)
+                    out_name = os.path.join(out_folder, f"{os.path.splitext(os.path.basename(self.file_path))[0]}.csv")
+                    big.to_csv(out_name, index=False, encoding='utf-8-sig')
+                    exported.append(out_name)
+
+            if exported:
+                self.status_label.config(text=f"Exported {len(exported)} file(s).", foreground="green")
+                messagebox.showinfo("Done", f"Exported {len(exported)} CSV file(s) to:\n{out_folder}")
+            else:
+                self.status_label.config(text="No data exported.", foreground="orange")
+                messagebox.showwarning("No data", "No sheets with data were found to export.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Conversion failed: {e}")
+            self.status_label.config(text="Conversion failed.", foreground="red")
+
 
 # =============================================================================
-# MAIN APP LAUNCHER
+# Main application
 # =============================================================================
-class MainApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Jester's Data Toolbox")
-        self.root.geometry("900x760")
+def main():
+    root = tk.Tk()
+    root.title("Data Toolkit")
+    root.geometry("1100x700")
 
-        # Create the Tab Container (Notebook)
-        self.notebook = ttk.Notebook(root)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+    # Notebook with tabs
+    nb = ttk.Notebook(root)
+    nb.pack(fill=tk.BOTH, expand=True)
 
-        # Create Frames for each tab
-        self.tab1 = ttk.Frame(self.notebook)
-        self.tab2 = ttk.Frame(self.notebook)
-        self.tab3 = ttk.Frame(self.notebook)
+    # Tab frames
+    tab1 = ttk.Frame(nb)
+    tab2 = ttk.Frame(nb)
+    tab3 = ttk.Frame(nb)
 
-        # Add tabs to notebook
-        self.notebook.add(self.tab1, text=" CSV Merger ")
-        self.notebook.add(self.tab2, text=" Data Processor ")
-        self.notebook.add(self.tab3, text=" Excel to CSV ")
+    nb.add(tab1, text="CSV Merger")
+    nb.add(tab2, text="Data Processor")
+    nb.add(tab3, text="Excel → CSV")
 
-        # Initialize the tools inside their respective tabs
-        SimpleCSVMerger(self.tab1)
-        DataProcessorGUI(self.tab2)
-        ExcelToCsvConverter(self.tab3)
+    # Instantiate tools
+    SimpleCSVMerger(tab1)
+    DataProcessorGUI(tab2)
+    ExcelToCsvConverter(tab3)
+
+    # Start
+    root.mainloop()
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = MainApp(root)
-    root.mainloop()
+    main()
