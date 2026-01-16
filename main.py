@@ -699,9 +699,9 @@ class DataProcessorGUI:
                 self.df['DATE TODAY'] = today
                 if 'DATEJOCLOSED' in self.df.columns:
                     self.df['DATEJOCLOSED'] = pd.to_datetime(self.df['DATEJOCLOSED'], errors='coerce')
-                    end_dates = self.df['DATEJOCLOSED']
+                    end_dates = self.df['DATEJOCLOSED'].fillna(today)
                 else:
-                    end_dates = self.df['DATE TODAY']
+                    end_dates = today
                 self.df['JOTODAY'] = (end_dates - self.df['DATEJOCREATED']).dt.days
             else:
                 self.df['DATEJOCREATED'] = pd.NaT
