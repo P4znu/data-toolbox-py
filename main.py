@@ -655,7 +655,12 @@ class DataProcessorGUI:
                 self.df['DATEJOCREATED'] = pd.to_datetime(self.df['DATEJOCREATED'], errors='coerce')
                 self.df['JOCRYEAR'] = self.df['DATEJOCREATED'].dt.year
                 self.df['DATE TODAY'] = today
-                if 'DATEJOCLOSED' in self.df.columns: self.df['DATEJOCLOSED'] = pd.to_datetime(self.df['DATEJOCLOSED']) self.df['JOTODAY'] = ((np.where(self.df['DATEJOCLOSED'].notna(), self.df['DATEJOCLOSED'], today) - self.df['DATEJOCREATED']).astype('timedelta64[D]')).astype(int) else: self.df['JOTODAY'] = (today - self.df['DATEJOCREATED']).dt.days
+                if 'DATEJOCLOSED' in self.df.columns:
+                    self.df['DATEJOCLOSED'] = pd.to_datetime(self.df['DATEJOCLOSED'])
+                    end_dates = self.df['DATEJOCLOSED'].fillna(today)
+                else:
+                    end_dates = today
+                self.df['JOTODAY'] = (end_dates - self.df['DATEJOCREATED']).dt.days
             else:
                 self.df['DATEJOCREATED'] = pd.NaT
                 self.df['JOCRYEAR'] = None
