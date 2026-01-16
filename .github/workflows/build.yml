@@ -1,4 +1,4 @@
-name: Build CSV Merger Executable
+name: Build Executable
 
 on:
   push:
