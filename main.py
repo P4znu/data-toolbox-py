@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Updated CSV merger, data processor, and Excel-to-CSV converter with Windows 10/11 styling,
-an Excel-like scrollable preview using ttk.Treeview, and live progress updates.
+Complete Data Toolkit with Enhanced Excel to CSV Converter
+- Tab 1: CSV Merger
+- Tab 2: Data Processor  
+- Tab 3: Enhanced Excel to CSV Converter (with sheet selection and preview)
 
-Drop this file into your project and run with Python 3.8+.
+Author: Jester Miranda (Enhanced)
 """
 
 import os
@@ -30,40 +32,29 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 
 # =============================================================================
-# TAB 1: CSV MERGER (Updated with Windows styling, Treeview preview, and live progress)
+# TAB 1: CSV MERGER
 # =============================================================================
 class SimpleCSVMerger:
     def __init__(self, parent):
         self.parent = parent
-        # Dataframes and metadata
         self.df1 = None
         self.df2 = None
         self.all_cols_f1 = []
         self.all_cols_f2 = []
         self.pull_vars = {}
         self.checkbox_widgets = []
-
-        # Preview widgets
         self.preview_tree = None
         self.preview_vscroll = None
         self.preview_hscroll = None
-
-        # Progress control lock
         self._prog_lock = threading.Lock()
-
         self.setup_ui()
 
-    # -------------------------
-    # UI and styling
-    # -------------------------
     def setup_ui(self):
-        # Apply Windows-like style and fonts
         self.setup_style()
-
         main = ttk.Frame(self.parent, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
 
-        # --- 1. File Selection ---
+        # File Selection
         ttk.Label(main, text="1. Select CSV Files", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
         f_frame = ttk.Frame(main)
         f_frame.pack(fill=tk.X, pady=6)
@@ -76,7 +67,7 @@ class SimpleCSVMerger:
         self.file2_path.pack(fill=tk.X, pady=(8, 2))
         ttk.Button(f_frame, text="Browse Source File", command=lambda: self.browse(2)).pack(fill=tk.X, pady=2)
 
-        # --- 2. Matching with Search ---
+        # Matching with Search
         ttk.Label(main, text="2. Join Keys (Searchable)", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
         m_frame = ttk.Frame(main)
         m_frame.pack(fill=tk.X, pady=6)
@@ -98,7 +89,7 @@ class SimpleCSVMerger:
         m_frame.columnconfigure(0, weight=1)
         m_frame.columnconfigure(2, weight=1)
 
-        # --- 3. Columns to Pull ---
+        # Columns to Pull
         ttk.Label(main, text="3. Columns to Pull", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
         ctrl = ttk.Frame(main)
         ctrl.pack(fill=tk.X, pady=6)
@@ -108,7 +99,6 @@ class SimpleCSVMerger:
         ttk.Button(ctrl, text="All", width=6, command=self.select_all).pack(side=tk.LEFT, padx=4)
         ttk.Button(ctrl, text="None", width=6, command=self.deselect_all).pack(side=tk.LEFT)
 
-        # Scrollable checkbox area
         canvas_frame = ttk.Frame(main)
         canvas_frame.pack(fill=tk.BOTH, expand=False, pady=6)
         self.check_canvas = tk.Canvas(canvas_frame, bg="white", height=140, highlightthickness=1)
@@ -120,7 +110,7 @@ class SimpleCSVMerger:
         self.check_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.check_frame.bind("<Configure>", lambda e: self.check_canvas.configure(scrollregion=self.check_canvas.bbox("all")))
 
-        # --- 4. Actions & Preview ---
+        # Actions & Preview
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=tk.X, pady=10)
         self.prev_btn = ttk.Button(btn_frame, text="PREVIEW DATA", command=self.show_preview, state=tk.DISABLED)
@@ -128,14 +118,13 @@ class SimpleCSVMerger:
         self.merge_btn = ttk.Button(btn_frame, text="SAVE MERGED FILE", command=self.process_merge, state=tk.DISABLED)
         self.merge_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
 
-        # Replace Text preview with Treeview (Excel-like)
         preview_label = ttk.Label(main, text="Preview (top rows)", font=('Segoe UI', 10, 'bold'))
         preview_label.pack(anchor=tk.W, pady=(6, 0))
 
         self.preview_frame = ttk.Frame(main, relief=tk.SOLID)
         self.preview_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
-        # --- 5. Status & Progress ---
+        # Status & Progress
         self.prog = ttk.Progressbar(main, mode='determinate', maximum=100)
         self.prog.pack(fill=tk.X, pady=6)
         self.stat_var = tk.StringVar(value="Ready")
@@ -144,7 +133,6 @@ class SimpleCSVMerger:
 
     def setup_style(self):
         style = ttk.Style()
-        # Prefer Windows-like theme on Windows
         try:
             if 'vista' in style.theme_names():
                 style.theme_use('vista')
@@ -155,7 +143,6 @@ class SimpleCSVMerger:
         except Exception:
             style.theme_use('clam')
 
-        # Global font and padding
         default_font = ('Segoe UI', 9)
         style.configure('.', font=default_font)
         style.configure('TButton', padding=(6, 4))
@@ -163,17 +150,12 @@ class SimpleCSVMerger:
         style.configure('Treeview', font=('Segoe UI', 9), rowheight=22)
         style.configure('Treeview.Heading', font=('Segoe UI', 9, 'bold'))
 
-        # Attempt to set scaling for high DPI on Windows
         try:
             if platform.system() == 'Windows':
-                # set a reasonable scaling for high DPI monitors
                 ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
             pass
 
-    # -------------------------
-    # File loading & detection
-    # -------------------------
     def detect_enc(self, path):
         try:
             with open(path, 'rb') as f:
@@ -192,14 +174,12 @@ class SimpleCSVMerger:
             self.load_data(num)
 
     def _set_progress(self, value, text=None):
-        # Thread-safe progress update
         def _update():
             try:
                 with self._prog_lock:
                     self.prog['value'] = value
                     if text is not None:
                         self.stat_var.set(text)
-                    # ensure UI refresh
                     try:
                         self.parent.update_idletasks()
                     except Exception:
@@ -221,7 +201,6 @@ class SimpleCSVMerger:
 
         def run():
             try:
-                # small animated progress while detecting/reading
                 for p in (5, 10, 18):
                     self._set_progress(p)
                     time.sleep(0.06)
@@ -233,10 +212,8 @@ class SimpleCSVMerger:
                     df = pd.read_csv(path, encoding='latin-1', engine='python')
 
                 df.columns = [str(c).strip() for c in df.columns]
-                # Ensure columns are unique
                 df = df.loc[:, ~df.columns.duplicated()]
 
-                # simulate parsing progress
                 for p in (30, 45, 60):
                     self._set_progress(p)
                     time.sleep(0.04)
@@ -248,8 +225,6 @@ class SimpleCSVMerger:
             except Exception as e:
                 self.parent.after(0, lambda: messagebox.showerror("File Error", str(e)))
                 self._set_progress(0, "Error")
-            finally:
-                pass
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -263,7 +238,6 @@ class SimpleCSVMerger:
             self.df2 = df
             self.all_cols_f2 = list(df.columns)
             self.filter_key_list(2)
-            # initialize pull_vars for df2 columns
             self.pull_vars = {col: tk.BooleanVar(value=False) for col in self.all_cols_f2}
             self.filter_checkboxes()
             self.stat_var.set("Source file loaded.")
@@ -272,9 +246,6 @@ class SimpleCSVMerger:
             self.prev_btn.config(state=tk.NORMAL)
             self.merge_btn.config(state=tk.NORMAL)
 
-    # -------------------------
-    # UI helpers
-    # -------------------------
     def filter_key_list(self, num):
         term = self.s1_var.get().lower() if num == 1 else self.s2_var.get().lower()
         full = self.all_cols_f1 if num == 1 else self.all_cols_f2
@@ -290,7 +261,6 @@ class SimpleCSVMerger:
             target.set('')
 
     def filter_checkboxes(self, *args):
-        # Clear existing
         for w in self.checkbox_widgets:
             try:
                 w.destroy()
@@ -299,7 +269,6 @@ class SimpleCSVMerger:
         self.checkbox_widgets = []
 
         term = self.search_var.get().lower()
-        # If pull_vars not initialized yet, nothing to show
         if not self.pull_vars:
             return
 
@@ -313,7 +282,6 @@ class SimpleCSVMerger:
                 cb.pack(fill=tk.X, padx=5, pady=1)
                 self.checkbox_widgets.append(cb)
 
-        # update scrollregion (bound to configure already)
         self.check_canvas.configure(scrollregion=self.check_canvas.bbox("all"))
 
     def select_all(self):
@@ -324,20 +292,12 @@ class SimpleCSVMerger:
         for v in self.pull_vars.values():
             v.set(False)
 
-    # -------------------------
-    # Merge logic (now threaded with live progress)
-    # -------------------------
     def _merge_worker(self, k1, k2, pull, callback):
-        """
-        Worker that performs the merge and updates progress periodically.
-        Calls callback(result_df_or_None, error_or_None) on completion.
-        """
         try:
             self._set_progress(10, "Preparing data for merge...")
             time.sleep(0.05)
 
             d1 = self.df1.copy()
-            # ensure requested pull columns exist in df2
             d2_cols = [c for c in ([k2] + pull) if c in self.df2.columns]
             if k2 not in d2_cols:
                 d2_cols.insert(0, k2)
@@ -346,15 +306,12 @@ class SimpleCSVMerger:
             self._set_progress(30, "Normalizing keys...")
             time.sleep(0.05)
 
-            # Normalize join keys to strings and strip
             d1[k1] = d1[k1].astype(str).str.strip()
             d2[k2] = d2[k2].astype(str).str.strip()
 
             self._set_progress(55, "Performing merge...")
-            # perform merge (this may be the heaviest step)
             res = d1.merge(d2, left_on=k1, right_on=k2, how='left', suffixes=('', '_src'))
 
-            # If both keys exist and are different, drop the right key column to avoid duplication
             if k1 != k2 and k2 in res.columns:
                 try:
                     res.drop(columns=[k2], inplace=True)
@@ -391,8 +348,6 @@ class SimpleCSVMerger:
             messagebox.showerror("Key Error", f"Key '{k2}' not found in source file.")
             return None
 
-        # We'll run merge in a background thread and block the caller until result is ready,
-        # but keep UI responsive by using a small wait loop. This allows the progressbar to animate.
         result_container = {'df': None, 'err': None}
         done_event = threading.Event()
 
@@ -403,7 +358,6 @@ class SimpleCSVMerger:
 
         threading.Thread(target=self._merge_worker, args=(k1, k2, pull, cb), daemon=True).start()
 
-        # Wait for completion but keep UI responsive
         while not done_event.is_set():
             try:
                 self.parent.update()
@@ -416,11 +370,7 @@ class SimpleCSVMerger:
             return None
         return result_container['df']
 
-    # -------------------------
-    # Preview (Treeview)
-    # -------------------------
     def populate_treeview_from_df(self, df, max_rows=200):
-        # Clear existing tree if present
         if self.preview_tree:
             try:
                 self.preview_tree.destroy()
@@ -439,41 +389,34 @@ class SimpleCSVMerger:
 
         cols = list(df.columns)
         if not cols:
-            # nothing to show
             return
 
-        # Create treeview
         self.preview_tree = ttk.Treeview(self.preview_frame, columns=cols, show='headings')
         self.preview_vscroll = ttk.Scrollbar(self.preview_frame, orient='vertical', command=self.preview_tree.yview)
         self.preview_hscroll = ttk.Scrollbar(self.preview_frame, orient='horizontal', command=self.preview_tree.xview)
         self.preview_tree.configure(yscrollcommand=self.preview_vscroll.set, xscrollcommand=self.preview_hscroll.set)
 
-        # Grid layout
         self.preview_tree.grid(row=0, column=0, sticky='nsew')
         self.preview_vscroll.grid(row=0, column=1, sticky='ns')
         self.preview_hscroll.grid(row=1, column=0, sticky='ew')
         self.preview_frame.columnconfigure(0, weight=1)
         self.preview_frame.rowconfigure(0, weight=1)
 
-        # Setup headings and column widths based on header and sample values
         sample = df.head(max_rows)
         for c in cols:
-            # estimate width: header length and sample content
             try:
                 max_sample_len = int(sample[c].astype(str).map(len).max()) if not sample.empty else 0
             except Exception:
                 max_sample_len = 0
             header_len = len(str(c))
-            est = min(max(80, (max(header_len, max_sample_len) * 7)), 400)  # px estimate
+            est = min(max(80, (max(header_len, max_sample_len) * 7)), 400)
             self.preview_tree.heading(c, text=c)
             self.preview_tree.column(c, width=est, anchor='w', stretch=True)
 
-        # Insert rows (limit to max_rows)
         for idx, row in sample.iterrows():
             values = [self._safe_display_value(row.get(c)) for c in cols]
             self.preview_tree.insert('', 'end', values=values)
 
-        # Allow copying cell text on double-click
         self.preview_tree.bind("<Double-1>", self._on_treeview_double_click)
 
     def _safe_display_value(self, v):
@@ -482,7 +425,6 @@ class SimpleCSVMerger:
         return str(v)
 
     def _on_treeview_double_click(self, event):
-        # Copy the clicked cell value to clipboard
         tree = self.preview_tree
         if tree is None:
             return
@@ -503,7 +445,6 @@ class SimpleCSVMerger:
             pass
 
     def show_preview(self):
-        # Run preview in a thread to keep UI responsive and show progress
         def run_preview():
             self._set_progress(5, "Starting preview...")
             res = self.perform_merge()
@@ -532,11 +473,7 @@ class SimpleCSVMerger:
 
         threading.Thread(target=run_preview, daemon=True).start()
 
-    # -------------------------
-    # Save merged result (threaded)
-    # -------------------------
     def process_merge(self):
-        # Run save in background thread to show progress
         def run_save():
             self._set_progress(5, "Starting merge and save...")
             res = self.perform_merge()
@@ -546,9 +483,7 @@ class SimpleCSVMerger:
                 if path:
                     try:
                         self._set_progress(60, "Writing CSV...")
-                        # write in chunks to allow progress updates for very large frames
                         try:
-                            # attempt to write with a streaming approach if large
                             res.to_csv(path, index=False, encoding='utf-8-sig')
                         except Exception:
                             res.to_csv(path, index=False)
@@ -568,21 +503,16 @@ class SimpleCSVMerger:
 
 
 # =============================================================================
-# TAB 2: DATA PROCESSOR (mostly unchanged but with live progress and threaded full process)
+# TAB 2: DATA PROCESSOR
 # =============================================================================
 class DataProcessorGUI:
     def __init__(self, parent):
         self.parent = parent
-
-        # State variables
         self.df = None
         self.file_path = None
         self.map_full_df = None
         self.map_df = None
-
-        # Progress lock
         self._prog_lock = threading.Lock()
-
         self.setup_ui()
         self.log("System Ready. Please load MAP.csv if not already present.")
         self.load_map_silent()
@@ -591,7 +521,6 @@ class DataProcessorGUI:
         main_frame = ttk.Frame(self.parent, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # --- Section 1: File Loading ---
         ttk.Label(main_frame, text="1. Load Data", font=('Helvetica', 10, 'bold')).pack(anchor=tk.W)
         file_btn = ttk.Button(main_frame, text="Select Data File (CSV/XLSX/JSON)", command=self.load_file)
         file_btn.pack(fill=tk.X, pady=5)
@@ -599,7 +528,6 @@ class DataProcessorGUI:
         self.file_label = ttk.Label(main_frame, text="No file selected", foreground="gray")
         self.file_label.pack(anchor=tk.W, pady=(0, 15))
 
-        # --- Section 2: Actions ---
         ttk.Label(main_frame, text="2. Data Operations", font=('Helvetica', 10, 'bold')).pack(anchor=tk.W)
 
         btn_frame = ttk.Frame(main_frame)
@@ -609,7 +537,6 @@ class DataProcessorGUI:
         ttk.Button(btn_frame, text="Filter ACT", command=self.filter_act).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
         ttk.Button(btn_frame, text="Full Process", command=self.run_full_process).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
 
-        # --- Section 3: Progress & Logs ---
         ttk.Label(main_frame, text="3. Progress & Activity Log", font=('Helvetica', 10, 'bold')).pack(anchor=tk.W, pady=(15, 0))
 
         self.progress = ttk.Progressbar(main_frame, orient=tk.HORIZONTAL, mode='determinate', maximum=100)
@@ -648,7 +575,6 @@ class DataProcessorGUI:
             try:
                 self.map_full_df = pd.read_csv(map_path)
                 if self.map_full_df.shape[1] >= 3:
-                    # Use first and third columns as PROVINCENAME and REGION if present
                     self.map_df = self.map_full_df.iloc[:, [0, 2]].copy()
                     self.map_df.columns = ['PROVINCENAME', 'REGION']
                     self.map_df.drop_duplicates(subset=['PROVINCENAME'], inplace=True)
@@ -669,16 +595,13 @@ class DataProcessorGUI:
 
                 if ext == '.csv':
                     try:
-                        # try utf-8 first
                         self.df = pd.read_csv(path, encoding='utf-8')
                     except Exception:
                         self.log("UTF-8 failed, trying latin1...")
                         self.df = pd.read_csv(path, encoding='latin1')
-
                 elif ext == '.xlsx':
                     self.df = pd.read_excel(path)
                 else:
-                    # json or jsonl
                     self.df = pd.read_json(path, lines=ext == '.jsonl')
 
                 self.file_path = path
@@ -705,7 +628,6 @@ class DataProcessorGUI:
             elif ext == '.xlsx':
                 self.df.to_excel(out_path, index=False)
             else:
-                # default to json
                 self.df.to_json(out_path, orient='records', indent=4)
             self.log(f"💾 File Saved: {out_path}")
             return out_path
@@ -739,7 +661,6 @@ class DataProcessorGUI:
             today = pd.to_datetime('today').normalize()
             yesterday = today - pd.Timedelta(days=1)
 
-            # Dynamic Headers
             dy_yesterday = f"{yesterday.strftime('%b%d').upper()} (STATUS)"
             dy_today = f"{today.strftime('%b%d').upper()} (STATUS)"
             dy_hours = f"AGED (HOURS) - {today.strftime('%b%d').upper()}"
@@ -751,14 +672,12 @@ class DataProcessorGUI:
                            'AREA', 'MSP', dy_yesterday, dy_today, 'JIRA TICKET STATUS',
                            'ACTION TAKEN', 'FINAL STATUS', dy_hours, dy_bucket, dy_group]
 
-            # Step 1: ensure headers
             self._set_progress(8, "Ensuring headers...")
             for col in new_headers:
                 if col not in self.df.columns:
                     self.df[col] = None
             time.sleep(0.04)
 
-            # Step 2: Alignment & Date Calculations
             self._set_progress(18, "Alignment & Date Calculations...")
             if 'ACCTNO' in self.df.columns:
                 self.df['ALIGNED ACCT'] = self.df['ACCTNO'].astype(str).str.strip().str.zfill(13)
@@ -774,7 +693,6 @@ class DataProcessorGUI:
                 lambda r: f"{r['ALIGNED ACCT']}:{r['ALIGNED JONO']}" if r.get('ALIGNED JONO') else None, axis=1
             )
 
-            # DATEJOCREATED handling
             if 'DATEJOCREATED' in self.df.columns:
                 self.df['DATEJOCREATED'] = pd.to_datetime(self.df['DATEJOCREATED'], errors='coerce')
                 self.df['JOCRYEAR'] = self.df['DATEJOCREATED'].dt.year
@@ -792,7 +710,6 @@ class DataProcessorGUI:
                 self.df['JOTODAY'] = None
 
             self._set_progress(35, "Calculating segment & product...")
-            # --- SEGMENT & PRODUCT ---
             if 'PACKAGENAME' in self.df.columns and 'PROVINCENAME' in self.df.columns:
                 conditions = [
                     self.df['PACKAGENAME'].astype(str).str.contains('BIDA', case=False, na=False),
@@ -817,7 +734,6 @@ class DataProcessorGUI:
             self._set_progress(50, "Applying ageing buckets...")
             time.sleep(0.04)
 
-            # Ageing
             if 'JOTODAY' in self.df.columns and self.df['JOTODAY'].notna().any():
                 self.df['JOTODAY'] = pd.to_numeric(self.df['JOTODAY'], errors='coerce')
                 self.df['AGEING'] = np.select(
@@ -838,7 +754,6 @@ class DataProcessorGUI:
             self._set_progress(65, "Mapping area...")
             time.sleep(0.04)
 
-            # Area Mapping
             if self.map_df is not None and 'PROVINCENAME' in self.df.columns:
                 area_dict = self.map_df.set_index('PROVINCENAME')['REGION'].to_dict()
                 self.df['AREA'] = self.df['PROVINCENAME'].astype(str).map(lambda x: area_dict.get(x, None))
@@ -848,13 +763,11 @@ class DataProcessorGUI:
             self._set_progress(75, "Starting MSP lookups...")
             time.sleep(0.04)
 
-            # MSP Logic
             if self.map_full_df is not None and 'PROVINCENAME' in self.df.columns:
                 self.log("Starting Complex MSP Lookups...")
                 self.df['MSP'] = None
                 p_mask = self.df['PROVINCENAME'].notna() & (self.df['PROVINCENAME'].astype(str).str.strip() != '')
 
-                # 1. Holy Spirit (example)
                 try:
                     if 'BARANGAYNAME' in self.df.columns and self.map_full_df.shape[1] > 8:
                         cond1 = (self.df['BARANGAYNAME'].astype(str).str.lower() == 'holy spirit') & \
@@ -867,7 +780,6 @@ class DataProcessorGUI:
                 except Exception as e:
                     self.log(f"MSP step 1 error: {e}")
 
-                # 2. Province | Municipality
                 try:
                     m_mask = p_mask & self.df['MSP'].isna()
                     if 'MUNICIPALITYNAME' in self.df.columns and self.map_full_df.shape[1] > 8:
@@ -880,7 +792,6 @@ class DataProcessorGUI:
                 except Exception as e:
                     self.log(f"MSP step 2 error: {e}")
 
-                # 3. Province Only
                 try:
                     m_mask = p_mask & self.df['MSP'].isna()
                     map_e_i = self.map_full_df.iloc[:, [4, 8]].dropna().copy()
@@ -893,7 +804,6 @@ class DataProcessorGUI:
             else:
                 self.log("MSP mapping skipped (MAP.csv missing or PROVINCENAME not in data).")
 
-            # Fill MSP blanks with empty string for consistency
             if 'MSP' in self.df.columns:
                 self.df['MSP'] = self.df['MSP'].fillna('')
 
@@ -921,157 +831,451 @@ class DataProcessorGUI:
         if self.df is None:
             messagebox.showwarning("Warning", "Load data first!")
             return
-
-        # Run the full process in a background thread so UI remains responsive and progress updates are visible
         threading.Thread(target=self._full_process_worker, daemon=True).start()
 
 
 # =============================================================================
-# TAB 3: XLSX TO CSV CONVERTER (completed, unchanged except minor progress feedback)
+# TAB 3: ENHANCED EXCEL TO CSV CONVERTER
 # =============================================================================
-class ExcelToCsvConverter:
+class EnhancedExcelToCsvConverter:
     def __init__(self, parent):
         self.parent = parent
         self.file_path = None
         self.output_folder = None
+        self.workbook = None
+        self.sheet_vars = {}
+        self.preview_tree = None
+        self.preview_vscroll = None
+        self.preview_hscroll = None
+        self._prog_lock = threading.Lock()
         self.setup_ui()
 
     def setup_ui(self):
-        main = ttk.Frame(self.parent, padding="20")
+        self.setup_style()
+        main = ttk.Frame(self.parent, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
 
         # File Selection
-        ttk.Label(main, text="Excel File (.xlsx):").grid(row=0, column=0, sticky="w", pady=5)
-        self.entry_file = ttk.Entry(main, width=50)
-        self.entry_file.grid(row=0, column=1, pady=5, sticky="ew")
-        ttk.Button(main, text="Browse", command=self.select_file).grid(row=0, column=2, padx=5)
+        ttk.Label(main, text="1. Select Excel File", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W)
+        file_frame = ttk.Frame(main)
+        file_frame.pack(fill=tk.X, pady=6)
+        
+        self.entry_file = ttk.Entry(file_frame, font=('Segoe UI', 9))
+        self.entry_file.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        ttk.Button(file_frame, text="Browse Excel File", command=self.select_file).pack(side=tk.LEFT)
 
-        # Output Selection
-        ttk.Label(main, text="Output Folder:").grid(row=1, column=0, sticky="w", pady=5)
-        self.entry_output = ttk.Entry(main, width=50)
-        self.entry_output.grid(row=1, column=1, pady=5, sticky="ew")
-        ttk.Button(main, text="Browse", command=self.select_output).grid(row=1, column=2, padx=5)
+        # Sheet Selection
+        ttk.Label(main, text="2. Select Sheets to Convert", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        
+        ctrl_frame = ttk.Frame(main)
+        ctrl_frame.pack(fill=tk.X, pady=6)
+        ttk.Button(ctrl_frame, text="Select All", width=12, command=self.select_all_sheets).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl_frame, text="Deselect All", width=12, command=self.deselect_all_sheets).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl_frame, text="Preview Selected", command=self.preview_selected_sheet).pack(side=tk.LEFT, padx=10)
+        
+        sheet_canvas_frame = ttk.Frame(main)
+        sheet_canvas_frame.pack(fill=tk.X, pady=6)
+        
+        self.sheet_canvas = tk.Canvas(sheet_canvas_frame, bg="white", height=120, highlightthickness=1, highlightbackground="#ccc")
+        sheet_scroll = ttk.Scrollbar(sheet_canvas_frame, orient="vertical", command=self.sheet_canvas.yview)
+        self.sheet_frame = ttk.Frame(self.sheet_canvas)
+        
+        self.sheet_canvas.create_window((0, 0), window=self.sheet_frame, anchor="nw")
+        self.sheet_canvas.configure(yscrollcommand=sheet_scroll.set)
+        
+        self.sheet_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sheet_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.sheet_frame.bind("<Configure>", lambda e: self.sheet_canvas.configure(scrollregion=self.sheet_canvas.bbox("all")))
 
-        # Options
-        self.split_sheets_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(main, text="Export each sheet to separate CSV", variable=self.split_sheets_var).grid(row=2, column=1, sticky="w", pady=6)
+        # Preview Area
+        ttk.Label(main, text="3. Preview (Double-click cell to copy)", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        
+        self.preview_frame = ttk.Frame(main, relief=tk.SOLID, borderwidth=1)
+        self.preview_frame.pack(fill=tk.BOTH, expand=True, pady=6)
+        
+        self.preview_label = ttk.Label(self.preview_frame, text="No preview available. Load an Excel file and select a sheet to preview.", 
+                                      foreground="gray", font=('Segoe UI', 9, 'italic'))
+        self.preview_label.pack(expand=True)
 
-        # Convert button
-        ttk.Button(main, text="Convert", command=self.convert).grid(row=3, column=1, pady=10)
+        # Output Options
+        ttk.Label(main, text="4. Output Options", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        
+        output_frame = ttk.Frame(main)
+        output_frame.pack(fill=tk.X, pady=6)
+        
+        self.entry_output = ttk.Entry(output_frame, font=('Segoe UI', 9))
+        self.entry_output.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        ttk.Button(output_frame, text="Browse Output Folder", command=self.select_output).pack(side=tk.LEFT)
 
-        # Status / log
-        self.status_label = ttk.Label(main, text="No file selected", foreground="gray")
-        self.status_label.grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        option_frame = ttk.Frame(main)
+        option_frame.pack(fill=tk.X, pady=6)
+        
+        self.combine_sheets_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(option_frame, text="Combine all selected sheets into one CSV", 
+                       variable=self.combine_sheets_var).pack(side=tk.LEFT, padx=5)
 
-        main.columnconfigure(1, weight=1)
+        # Convert Button
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill=tk.X, pady=10)
+        
+        self.convert_btn = ttk.Button(btn_frame, text="CONVERT TO CSV", command=self.convert, state=tk.DISABLED)
+        self.convert_btn.pack(fill=tk.X, padx=4)
+
+        # Progress & Status
+        self.progress = ttk.Progressbar(main, mode='determinate', maximum=100)
+        self.progress.pack(fill=tk.X, pady=6)
+        
+        self.status_var = tk.StringVar(value="Ready. Please select an Excel file.")
+        self.status_bar = ttk.Label(main, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def setup_style(self):
+        style = ttk.Style()
+        try:
+            if 'vista' in style.theme_names():
+                style.theme_use('vista')
+            elif 'xpnative' in style.theme_names():
+                style.theme_use('xpnative')
+            else:
+                style.theme_use('clam')
+        except Exception:
+            style.theme_use('clam')
+
+        default_font = ('Segoe UI', 9)
+        style.configure('.', font=default_font)
+        style.configure('TButton', padding=(6, 4))
+        style.configure('TEntry', padding=(4, 4))
+        style.configure('Treeview', font=('Segoe UI', 9), rowheight=22)
+        style.configure('Treeview.Heading', font=('Segoe UI', 9, 'bold'))
+
+    def _set_progress(self, value, text=None):
+        def _update():
+            try:
+                with self._prog_lock:
+                    self.progress['value'] = value
+                    if text is not None:
+                        self.status_var.set(text)
+                    try:
+                        self.parent.update_idletasks()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        try:
+            self.parent.after(0, _update)
+        except Exception:
+            _update()
 
     def select_file(self):
-        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        path = filedialog.askopenfilename(
+            title="Select Excel File",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+        )
         if path:
             self.file_path = path
             self.entry_file.delete(0, tk.END)
             self.entry_file.insert(0, path)
-            self.status_label.config(text=f"Selected: {os.path.basename(path)}", foreground="#007bff")
+            self.load_workbook_sheets()
+
+    def load_workbook_sheets(self):
+        if not self.file_path:
+            return
+            
+        self._set_progress(10, "Loading Excel file...")
+        
+        def _load():
+            try:
+                self.workbook = load_workbook(self.file_path, read_only=True, data_only=True)
+                sheets = self.workbook.sheetnames
+                
+                self._set_progress(50, "Loading sheets...")
+                
+                self.parent.after(0, lambda: self._populate_sheet_list(sheets))
+                
+                self._set_progress(100, f"Loaded {len(sheets)} sheet(s) successfully.")
+                self.parent.after(200, lambda: self._set_progress(0, "Ready"))
+                
+            except Exception as e:
+                self.parent.after(0, lambda: messagebox.showerror("Error", f"Failed to load Excel file:\n{e}"))
+                self._set_progress(0, "Error loading file.")
+        
+        threading.Thread(target=_load, daemon=True).start()
+
+    def _populate_sheet_list(self, sheets):
+        for widget in self.sheet_frame.winfo_children():
+            widget.destroy()
+        
+        self.sheet_vars.clear()
+        
+        if not sheets:
+            ttk.Label(self.sheet_frame, text="No sheets found in workbook", 
+                     foreground="gray", font=('Segoe UI', 9, 'italic')).pack(pady=10)
+            return
+        
+        for sheet_name in sheets:
+            var = tk.BooleanVar(value=True)
+            self.sheet_vars[sheet_name] = var
+            
+            frame = ttk.Frame(self.sheet_frame)
+            frame.pack(fill=tk.X, padx=5, pady=2)
+            
+            cb = ttk.Checkbutton(frame, text=sheet_name, variable=var)
+            cb.pack(side=tk.LEFT)
+            
+            preview_btn = ttk.Button(frame, text="Preview", width=8,
+                                    command=lambda s=sheet_name: self.preview_sheet(s))
+            preview_btn.pack(side=tk.RIGHT, padx=5)
+        
+        self.sheet_canvas.configure(scrollregion=self.sheet_canvas.bbox("all"))
+        self.convert_btn.config(state=tk.NORMAL)
+
+    def select_all_sheets(self):
+        for var in self.sheet_vars.values():
+            var.set(True)
+
+    def deselect_all_sheets(self):
+        for var in self.sheet_vars.values():
+            var.set(False)
+
+    def preview_selected_sheet(self):
+        selected = [name for name, var in self.sheet_vars.items() if var.get()]
+        if not selected:
+            messagebox.showwarning("No Selection", "Please select at least one sheet to preview.")
+            return
+        self.preview_sheet(selected[0])
+
+    def preview_sheet(self, sheet_name):
+        if not self.workbook:
+            messagebox.showwarning("No File", "Please load an Excel file first.")
+            return
+        
+        self._set_progress(10, f"Loading preview of '{sheet_name}'...")
+        
+        def _load_preview():
+            try:
+                ws = self.workbook[sheet_name]
+                rows = list(ws.values)
+                
+                if not rows:
+                    self.parent.after(0, lambda: messagebox.showinfo("Empty Sheet", f"Sheet '{sheet_name}' is empty."))
+                    self._set_progress(0, "Ready")
+                    return
+                
+                self._set_progress(40, "Processing data...")
+                
+                header = [str(c) if c is not None else f"Column_{i}" for i, c in enumerate(rows[0])]
+                data_rows = rows[1:] if len(rows) > 1 else []
+                
+                preview_rows = data_rows[:500]
+                df = pd.DataFrame(preview_rows, columns=header)
+                
+                self._set_progress(70, "Rendering preview...")
+                
+                self.parent.after(0, lambda: self._populate_preview(df, sheet_name))
+                
+                self._set_progress(100, f"Preview loaded: {len(df)} rows")
+                self.parent.after(200, lambda: self._set_progress(0, "Ready"))
+                
+            except Exception as e:
+                self.parent.after(0, lambda: messagebox.showerror("Preview Error", f"Failed to preview sheet:\n{e}"))
+                self._set_progress(0, "Preview failed.")
+        
+        threading.Thread(target=_load_preview, daemon=True).start()
+
+    def _populate_preview(self, df, sheet_name):
+        if self.preview_tree:
+            self.preview_tree.destroy()
+        if self.preview_vscroll:
+            self.preview_vscroll.destroy()
+        if self.preview_hscroll:
+            self.preview_hscroll.destroy()
+        if self.preview_label:
+            self.preview_label.destroy()
+            self.preview_label = None
+
+        if df.empty:
+            self.preview_label = ttk.Label(self.preview_frame, 
+                                          text=f"Sheet '{sheet_name}' has no data to preview.",
+                                          foreground="gray", font=('Segoe UI', 9, 'italic'))
+            self.preview_label.pack(expand=True)
+            return
+
+        cols = list(df.columns)
+        self.preview_tree = ttk.Treeview(self.preview_frame, columns=cols, show='headings', height=15)
+        self.preview_vscroll = ttk.Scrollbar(self.preview_frame, orient='vertical', command=self.preview_tree.yview)
+        self.preview_hscroll = ttk.Scrollbar(self.preview_frame, orient='horizontal', command=self.preview_tree.xview)
+        
+        self.preview_tree.configure(yscrollcommand=self.preview_vscroll.set, 
+                                   xscrollcommand=self.preview_hscroll.set)
+
+        self.preview_tree.grid(row=0, column=0, sticky='nsew')
+        self.preview_vscroll.grid(row=0, column=1, sticky='ns')
+        self.preview_hscroll.grid(row=1, column=0, sticky='ew')
+        
+        self.preview_frame.columnconfigure(0, weight=1)
+        self.preview_frame.rowconfigure(0, weight=1)
+
+        for col in cols:
+            try:
+                max_len = df[col].astype(str).str.len().max()
+            except:
+                max_len = 0
+            
+            header_len = len(str(col))
+            est_width = min(max(100, max(header_len, max_len) * 8), 300)
+            
+            self.preview_tree.heading(col, text=col)
+            self.preview_tree.column(col, width=est_width, anchor='w', stretch=True)
+
+        for idx, row in df.iterrows():
+            values = [self._safe_str(row.get(c)) for c in cols]
+            self.preview_tree.insert('', 'end', values=values)
+
+        self.preview_tree.bind("<Double-1>", self._on_cell_double_click)
+        
+        total_rows = len(df)
+        self.status_var.set(f"Previewing sheet '{sheet_name}' - Showing {total_rows} rows")
+
+    def _safe_str(self, value):
+        if pd.isna(value) or value is None:
+            return ''
+        return str(value)
+
+    def _on_cell_double_click(self, event):
+        tree = self.preview_tree
+        if not tree:
+            return
+        
+        item = tree.identify_row(event.y)
+        col = tree.identify_column(event.x)
+        
+        if not item or not col:
+            return
+        
+        try:
+            col_index = int(col.replace('#', '')) - 1
+            values = tree.item(item, 'values')
+            
+            if col_index < len(values):
+                value = values[col_index]
+                root = self.parent.winfo_toplevel()
+                root.clipboard_clear()
+                root.clipboard_append(value)
+                self.status_var.set(f"Copied to clipboard: {value[:50]}...")
+        except Exception:
+            pass
 
     def select_output(self):
-        folder = filedialog.askdirectory()
+        folder = filedialog.askdirectory(title="Select Output Folder")
         if folder:
             self.output_folder = folder
             self.entry_output.delete(0, tk.END)
             self.entry_output.insert(0, folder)
 
     def convert(self):
-        if not self.file_path:
-            messagebox.showwarning("No file", "Please select an Excel file to convert.")
+        if not self.file_path or not self.workbook:
+            messagebox.showwarning("No File", "Please select an Excel file first.")
             return
+
+        selected_sheets = [name for name, var in self.sheet_vars.items() if var.get()]
+        
+        if not selected_sheets:
+            messagebox.showwarning("No Selection", "Please select at least one sheet to convert.")
+            return
+
         out_folder = self.output_folder or os.path.join(os.path.dirname(self.file_path), "converted_csvs")
         os.makedirs(out_folder, exist_ok=True)
 
+        combine = self.combine_sheets_var.get()
+        
         def _convert_worker():
             try:
-                wb = load_workbook(self.file_path, read_only=True, data_only=True)
-                sheets = wb.sheetnames
                 exported = []
-                total = len(sheets) if sheets else 1
-                count = 0
-                if self.split_sheets_var.get():
-                    for sheet in sheets:
-                        count += 1
-                        ws = wb[sheet]
-                        rows = list(ws.values)
-                        if not rows:
-                            continue
-                        # Use first row as header if it looks like headers
-                        header = [str(c) if c is not None else "" for c in rows[0]]
-                        data_rows = rows[1:] if len(rows) > 1 else []
-                        df = pd.DataFrame(data_rows, columns=header)
-                        out_name = os.path.join(out_folder, f"{os.path.splitext(os.path.basename(self.file_path))[0]}_{sheet}.csv")
-                        df.to_csv(out_name, index=False, encoding='utf-8-sig')
-                        exported.append(out_name)
-                        # update status
-                        try:
-                            self.parent.after(0, lambda s=count, t=total: self.status_label.config(text=f"Exported {s}/{t} sheets...", foreground="#007bff"))
-                        except Exception:
-                            pass
-                else:
-                    # Combine all sheets vertically with sheet name column
+                total = len(selected_sheets)
+                
+                if combine:
+                    self._set_progress(5, "Combining sheets...")
                     combined = []
-                    for sheet in sheets:
-                        count += 1
-                        ws = wb[sheet]
+                    
+                    for idx, sheet_name in enumerate(selected_sheets):
+                        progress = int(10 + (idx / total) * 70)
+                        self._set_progress(progress, f"Reading sheet {idx + 1}/{total}: {sheet_name}")
+                        
+                        ws = self.workbook[sheet_name]
                         rows = list(ws.values)
+                        
                         if not rows:
                             continue
-                        header = [str(c) if c is not None else "" for c in rows[0]]
+                        
+                        header = [str(c) if c is not None else f"Column_{i}" for i, c in enumerate(rows[0])]
                         data_rows = rows[1:] if len(rows) > 1 else []
+                        
                         df = pd.DataFrame(data_rows, columns=header)
-                        df['__sheet__'] = sheet
+                        df['__SheetName__'] = sheet_name
                         combined.append(df)
-                        try:
-                            self.parent.after(0, lambda s=count, t=total: self.status_label.config(text=f"Reading {s}/{t} sheets...", foreground="#007bff"))
-                        except Exception:
-                            pass
+                    
                     if combined:
-                        big = pd.concat(combined, ignore_index=True)
-                        out_name = os.path.join(out_folder, f"{os.path.splitext(os.path.basename(self.file_path))[0]}.csv")
-                        big.to_csv(out_name, index=False, encoding='utf-8-sig')
-                        exported.append(out_name)
-
-                if exported:
-                    try:
-                        self.parent.after(0, lambda: self.status_label.config(text=f"Exported {len(exported)} file(s).", foreground="green"))
-                        self.parent.after(0, lambda: messagebox.showinfo("Done", f"Exported {len(exported)} CSV file(s) to:\n{out_folder}"))
-                    except Exception:
-                        pass
+                        self._set_progress(85, "Merging data...")
+                        final_df = pd.concat(combined, ignore_index=True)
+                        
+                        base_name = os.path.splitext(os.path.basename(self.file_path))[0]
+                        out_path = os.path.join(out_folder, f"{base_name}_combined.csv")
+                        
+                        self._set_progress(95, "Writing CSV file...")
+                        final_df.to_csv(out_path, index=False, encoding='utf-8-sig')
+                        exported.append(out_path)
+                
                 else:
-                    try:
-                        self.parent.after(0, lambda: self.status_label.config(text="No data exported.", foreground="orange"))
-                        self.parent.after(0, lambda: messagebox.showwarning("No data", "No sheets with data were found to export."))
-                    except Exception:
-                        pass
+                    for idx, sheet_name in enumerate(selected_sheets):
+                        progress = int(10 + (idx / total) * 85)
+                        self._set_progress(progress, f"Converting {idx + 1}/{total}: {sheet_name}")
+                        
+                        ws = self.workbook[sheet_name]
+                        rows = list(ws.values)
+                        
+                        if not rows:
+                            continue
+                        
+                        header = [str(c) if c is not None else f"Column_{i}" for i, c in enumerate(rows[0])]
+                        data_rows = rows[1:] if len(rows) > 1 else []
+                        
+                        df = pd.DataFrame(data_rows, columns=header)
+                        
+                        safe_name = "".join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in sheet_name)
+                        base_name = os.path.splitext(os.path.basename(self.file_path))[0]
+                        out_path = os.path.join(out_folder, f"{base_name}_{safe_name}.csv")
+                        
+                        df.to_csv(out_path, index=False, encoding='utf-8-sig')
+                        exported.append(out_path)
+                
+                self._set_progress(100, f"Conversion complete: {len(exported)} file(s) created")
+                
+                msg = f"Successfully converted {len(exported)} file(s) to:\n{out_folder}"
+                self.parent.after(0, lambda: messagebox.showinfo("Success", msg))
+                
+                self.parent.after(500, lambda: self._set_progress(0, "Ready"))
+                
             except Exception as e:
-                try:
-                    self.parent.after(0, lambda: messagebox.showerror("Error", f"Conversion failed: {e}"))
-                    self.parent.after(0, lambda: self.status_label.config(text="Conversion failed.", foreground="red"))
-                except Exception:
-                    pass
-
+                error_msg = f"Conversion failed:\n{e}"
+                self.parent.after(0, lambda: messagebox.showerror("Error", error_msg))
+                self._set_progress(0, "Conversion failed.")
+        
         threading.Thread(target=_convert_worker, daemon=True).start()
 
 
 # =============================================================================
-# Main application
+# MAIN APPLICATION
 # =============================================================================
 def main():
     root = tk.Tk()
-    root.title("Data Toolkit - Jester Miranda")
-    root.geometry("1100x700")
+    root.title("Data Toolkit - Jester Miranda (Enhanced)")
+    root.geometry("1100x750")
 
-    # Notebook with tabs
     nb = ttk.Notebook(root)
     nb.pack(fill=tk.BOTH, expand=True)
 
-    # Tab frames
     tab1 = ttk.Frame(nb)
     tab2 = ttk.Frame(nb)
     tab3 = ttk.Frame(nb)
@@ -1080,12 +1284,10 @@ def main():
     nb.add(tab2, text="Data Processor")
     nb.add(tab3, text="Excel → CSV")
 
-    # Instantiate tools
     SimpleCSVMerger(tab1)
     DataProcessorGUI(tab2)
-    ExcelToCsvConverter(tab3)
+    EnhancedExcelToCsvConverter(tab3)
 
-    # Start
     root.mainloop()
 
 
