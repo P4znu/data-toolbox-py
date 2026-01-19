@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 Complete Data Toolkit with Enhanced Excel to CSV Converter
-- Tab 1: CSV Merger
+- Tab 1: CSV Merger (VLOOKUP Style)
 - Tab 2: Data Processor  
 - Tab 3: Enhanced Excel to CSV Converter (with sheet selection and preview)
 
-Author: Jester Miranda (Enhanced)
+Author: Jester Miranda (Enhanced with VLOOKUP)
 """
 
 import os
@@ -32,7 +32,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 
 # =============================================================================
-# TAB 1: CSV MERGER
+# TAB 1: CSV MERGER (VLOOKUP STYLE)
 # =============================================================================
 class SimpleCSVMerger:
     def __init__(self, parent):
@@ -65,10 +65,10 @@ class SimpleCSVMerger:
 
         self.file2_path = ttk.Entry(f_frame, font=('Segoe UI', 9))
         self.file2_path.pack(fill=tk.X, pady=(8, 2))
-        ttk.Button(f_frame, text="Browse Source File", command=lambda: self.browse(2)).pack(fill=tk.X, pady=2)
+        ttk.Button(f_frame, text="Browse Lookup Table File", command=lambda: self.browse(2)).pack(fill=tk.X, pady=2)
 
         # Matching with Search
-        ttk.Label(main, text="2. Join Keys (Searchable)", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        ttk.Label(main, text="2. Lookup Keys (VLOOKUP Style)", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
         m_frame = ttk.Frame(main)
         m_frame.pack(fill=tk.X, pady=6)
 
@@ -90,7 +90,7 @@ class SimpleCSVMerger:
         m_frame.columnconfigure(2, weight=1)
 
         # Columns to Pull
-        ttk.Label(main, text="3. Columns to Pull", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
+        ttk.Label(main, text="3. Columns to Lookup and Add", font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 0))
         ctrl = ttk.Frame(main)
         ctrl.pack(fill=tk.X, pady=6)
         self.search_var = tk.StringVar()
@@ -115,7 +115,7 @@ class SimpleCSVMerger:
         btn_frame.pack(fill=tk.X, pady=10)
         self.prev_btn = ttk.Button(btn_frame, text="PREVIEW DATA", command=self.show_preview, state=tk.DISABLED)
         self.prev_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-        self.merge_btn = ttk.Button(btn_frame, text="SAVE MERGED FILE", command=self.process_merge, state=tk.DISABLED)
+        self.merge_btn = ttk.Button(btn_frame, text="SAVE VLOOKUP RESULT", command=self.process_merge, state=tk.DISABLED)
         self.merge_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
 
         preview_label = ttk.Label(main, text="Preview (top rows)", font=('Segoe UI', 10, 'bold'))
@@ -127,7 +127,7 @@ class SimpleCSVMerger:
         # Status & Progress
         self.prog = ttk.Progressbar(main, mode='determinate', maximum=100)
         self.prog.pack(fill=tk.X, pady=6)
-        self.stat_var = tk.StringVar(value="Ready")
+        self.stat_var = tk.StringVar(value="Ready - VLOOKUP Mode")
         self.stat_bar = ttk.Label(main, textvariable=self.stat_var, relief=tk.SUNKEN, anchor=tk.W)
         self.stat_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
@@ -240,7 +240,7 @@ class SimpleCSVMerger:
             self.filter_key_list(2)
             self.pull_vars = {col: tk.BooleanVar(value=False) for col in self.all_cols_f2}
             self.filter_checkboxes()
-            self.stat_var.set("Source file loaded.")
+            self.stat_var.set("Lookup table loaded.")
 
         if self.df1 is not None and self.df2 is not None:
             self.prev_btn.config(state=tk.NORMAL)
@@ -294,34 +294,50 @@ class SimpleCSVMerger:
 
     def _merge_worker(self, k1, k2, pull, callback):
         try:
-            self._set_progress(10, "Preparing data for merge...")
+            self._set_progress(10, "Preparing data for VLOOKUP...")
             time.sleep(0.05)
 
-            d1 = self.df1.copy()
-            d2_cols = [c for c in ([k2] + pull) if c in self.df2.columns]
-            if k2 not in d2_cols:
-                d2_cols.insert(0, k2)
+            # Start with a copy of the primary file
+            res = self.df1.copy()
+            
+            # Prepare the lookup table from source file
+            d2_cols = [k2] + [c for c in pull if c in self.df2.columns and c != k2]
             d2 = self.df2[d2_cols].copy()
 
             self._set_progress(30, "Normalizing keys...")
             time.sleep(0.05)
 
-            d1[k1] = d1[k1].astype(str).str.strip()
+            # Normalize keys for matching
+            res[k1] = res[k1].astype(str).str.strip()
             d2[k2] = d2[k2].astype(str).str.strip()
 
-            self._set_progress(55, "Performing merge...")
-            res = d1.merge(d2, left_on=k1, right_on=k2, how='left', suffixes=('', '_src'))
+            # Remove duplicates from lookup table, keeping first occurrence
+            d2 = d2.drop_duplicates(subset=[k2], keep='first')
 
-            if k1 != k2 and k2 in res.columns:
-                try:
-                    res.drop(columns=[k2], inplace=True)
-                except Exception:
-                    pass
+            self._set_progress(55, "Performing VLOOKUP...")
+            
+            # Create a dictionary for each column to lookup
+            lookup_dicts = {}
+            for col in pull:
+                if col in d2.columns:
+                    lookup_dicts[col] = dict(zip(d2[k2], d2[col]))
 
-            self._set_progress(85, "Finalizing merge...")
+            # Add new columns to result if they don't exist
+            for col in pull:
+                if col not in res.columns:
+                    res[col] = None
+
+            # Perform VLOOKUP for each pulled column
+            for col, lookup_dict in lookup_dicts.items():
+                progress_idx = list(lookup_dicts.keys()).index(col)
+                self._set_progress(55 + int((progress_idx / len(lookup_dicts)) * 25), 
+                                 f"Looking up {col}...")
+                res[col] = res[k1].map(lookup_dict)
+
+            self._set_progress(85, "Finalizing VLOOKUP...")
             time.sleep(0.05)
 
-            self._set_progress(100, "Merge complete.")
+            self._set_progress(100, "VLOOKUP complete.")
             time.sleep(0.06)
             self._set_progress(0, "Ready")
             callback(res, None)
@@ -334,18 +350,18 @@ class SimpleCSVMerger:
         pull = [c for c, v in self.pull_vars.items() if v.get()]
 
         if not k1 or not k2 or not pull:
-            messagebox.showwarning("Input Missing", "Select both keys and at least one column to pull.")
+            messagebox.showwarning("Input Missing", "Select both keys and at least one column to lookup.")
             return None
 
         if self.df1 is None or self.df2 is None:
-            messagebox.showwarning("Data Missing", "Both files must be loaded before merging.")
+            messagebox.showwarning("Data Missing", "Both files must be loaded before performing VLOOKUP.")
             return None
 
         if k1 not in self.df1.columns:
             messagebox.showerror("Key Error", f"Key '{k1}' not found in primary file.")
             return None
         if k2 not in self.df2.columns:
-            messagebox.showerror("Key Error", f"Key '{k2}' not found in source file.")
+            messagebox.showerror("Key Error", f"Key '{k2}' not found in lookup table.")
             return None
 
         result_container = {'df': None, 'err': None}
@@ -366,7 +382,7 @@ class SimpleCSVMerger:
             time.sleep(0.02)
 
         if result_container['err'] is not None:
-            messagebox.showerror("Merge Error", f"Error during merge: {result_container['err']}")
+            messagebox.showerror("VLOOKUP Error", f"Error during VLOOKUP: {result_container['err']}")
             return None
         return result_container['df']
 
@@ -475,10 +491,10 @@ class SimpleCSVMerger:
 
     def process_merge(self):
         def run_save():
-            self._set_progress(5, "Starting merge and save...")
+            self._set_progress(5, "Starting VLOOKUP and save...")
             res = self.perform_merge()
             if res is not None:
-                path = filedialog.asksaveasfilename(defaultextension=".csv", initialfile="merged_output.csv",
+                path = filedialog.asksaveasfilename(defaultextension=".csv", initialfile="vlookup_output.csv",
                                                     filetypes=[("CSV files", "*.csv")])
                 if path:
                     try:
@@ -497,7 +513,7 @@ class SimpleCSVMerger:
                 else:
                     self._set_progress(0, "Save cancelled.")
             else:
-                self._set_progress(0, "Merge failed; nothing saved.")
+                self._set_progress(0, "VLOOKUP failed; nothing saved.")
 
         threading.Thread(target=run_save, daemon=True).start()
 
@@ -1270,7 +1286,7 @@ class EnhancedExcelToCsvConverter:
 # =============================================================================
 def main():
     root = tk.Tk()
-    root.title("Data Toolkit - Jester Miranda (Enhanced)")
+    root.title("Data Toolkit - Jester Miranda (VLOOKUP Enhanced)")
     root.geometry("1100x750")
 
     nb = ttk.Notebook(root)
@@ -1280,7 +1296,7 @@ def main():
     tab2 = ttk.Frame(nb)
     tab3 = ttk.Frame(nb)
 
-    nb.add(tab1, text="CSV Merger")
+    nb.add(tab1, text="CSV Looker (LOOKUP)")
     nb.add(tab2, text="Data Processor")
     nb.add(tab3, text="Excel → CSV")
 
