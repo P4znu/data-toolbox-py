@@ -316,23 +316,34 @@ class SimpleCSVMerger:
 
             self._set_progress(55, "Performing VLOOKUP...")
             
-            # Create a dictionary for each column to lookup
+            # Create a dictionary for each column to lookup with renamed columns if needed
             lookup_dicts = {}
+            column_mapping = {}  # Maps original column name to new column name if renamed
+            
             for col in pull:
                 if col in d2.columns:
-                    lookup_dicts[col] = dict(zip(d2[k2], d2[col]))
+                    # Determine the target column name
+                    target_col = col
+                    if col in res.columns:
+                        # Column already exists in primary file, rename it
+                        target_col = f"{col}_1"
+                        column_mapping[col] = target_col
+                    else:
+                        column_mapping[col] = col
+                    
+                    lookup_dicts[target_col] = dict(zip(d2[k2], d2[col]))
 
-            # Add new columns to result if they don't exist
-            for col in pull:
-                if col not in res.columns:
-                    res[col] = None
+            # Add new columns to result
+            for target_col in lookup_dicts.keys():
+                if target_col not in res.columns:
+                    res[target_col] = None
 
             # Perform VLOOKUP for each pulled column
-            for col, lookup_dict in lookup_dicts.items():
-                progress_idx = list(lookup_dicts.keys()).index(col)
+            for target_col, lookup_dict in lookup_dicts.items():
+                progress_idx = list(lookup_dicts.keys()).index(target_col)
                 self._set_progress(55 + int((progress_idx / len(lookup_dicts)) * 25), 
-                                 f"Looking up {col}...")
-                res[col] = res[k1].map(lookup_dict)
+                                 f"Looking up {target_col}...")
+                res[target_col] = res[k1].map(lookup_dict)
 
             self._set_progress(85, "Finalizing VLOOKUP...")
             time.sleep(0.05)
@@ -1286,7 +1297,7 @@ class EnhancedExcelToCsvConverter:
 # =============================================================================
 def main():
     root = tk.Tk()
-    root.title("Data Toolkit - Jester Miranda (VLOOKUP Enhanced)")
+    root.title("Data Toolkit - Jester Miranda")
     root.geometry("1100x750")
 
     nb = ttk.Notebook(root)
@@ -1296,7 +1307,7 @@ def main():
     tab2 = ttk.Frame(nb)
     tab3 = ttk.Frame(nb)
 
-    nb.add(tab1, text="CSV Looker (LOOKUP)")
+    nb.add(tab1, text="CSV Lookup (VLOOKUP)")
     nb.add(tab2, text="Data Processor")
     nb.add(tab3, text="Excel → CSV")
 
