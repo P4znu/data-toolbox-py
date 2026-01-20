@@ -336,14 +336,15 @@ class SimpleCSVMerger:
             # Add new columns to result
             for target_col in lookup_dicts.keys():
                 if target_col not in res.columns:
-                    res[target_col] = None
+                    res[target_col] = 'NA'
 
             # Perform VLOOKUP for each pulled column
             for target_col, lookup_dict in lookup_dicts.items():
                 progress_idx = list(lookup_dicts.keys()).index(target_col)
                 self._set_progress(55 + int((progress_idx / len(lookup_dicts)) * 25), 
                                  f"Looking up {target_col}...")
-                res[target_col] = res[k1].map(lookup_dict)
+                # Map values and fill non-matches with 'NA'
+                res[target_col] = res[k1].map(lookup_dict).fillna('NA')
 
             self._set_progress(85, "Finalizing VLOOKUP...")
             time.sleep(0.05)
@@ -1307,7 +1308,7 @@ def main():
     tab2 = ttk.Frame(nb)
     tab3 = ttk.Frame(nb)
 
-    nb.add(tab1, text="CSV Lookup (VLOOKUP)")
+    nb.add(tab1, text="CSV Lookup")
     nb.add(tab2, text="Data Processor")
     nb.add(tab3, text="Excel → CSV")
 
